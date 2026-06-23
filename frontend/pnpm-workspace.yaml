@@ -1,0 +1,5 @@
+# Allow these packages to run their native-binary install scripts.
+# (pnpm 11 blocks build scripts by default; opt them in here.)
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
