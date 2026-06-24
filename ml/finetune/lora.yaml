@@ -1,0 +1,30 @@
+# MLX-LM LoRA config for the Gemma 4 grounded-citation adapter (Apple Silicon).
+#
+#   cd ml/finetune
+#   mlx_lm.lora --config lora.yaml          # train
+#   mlx_lm.fuse --model <base> --adapter-path ../adapters/gemma4-rag-lora \
+#       --save-path ../adapters/gemma4-rag-merged   # merge for serving
+#
+# Pin `model` to the Gemma 4 build available in MLX (Gemma 3 E4B is the drop-in
+# fallback if a Gemma 4 MLX conversion lags).
+
+model: "mlx-community/gemma-4-e4b-it-4bit"
+train: true
+data: "../datasets" # expects train.jsonl + valid.jsonl in MLX chat format
+adapter_path: "../adapters/gemma4-rag-lora"
+
+fine_tune_type: lora
+num_layers: 16
+batch_size: 4
+iters: 600
+learning_rate: 1.0e-5
+steps_per_report: 20
+steps_per_eval: 100
+save_every: 200
+max_seq_length: 2048
+grad_checkpoint: true
+
+lora_parameters:
+  rank: 16
+  scale: 20.0
+  dropout: 0.05
