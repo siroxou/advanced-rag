@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const FEATURES = [
   {
     title: "RBAC at the retrieval layer",
@@ -19,10 +21,10 @@ const FEATURES = [
 
 const PHASES = [
   { n: 0, label: "Scaffold + inference abstraction", done: true },
-  { n: 1, label: "Core RAG (ingest → pgvector → rerank)", done: false },
-  { n: 2, label: "RBAC via Postgres RLS", done: false },
-  { n: 3, label: "Multi-agent + web search", done: false },
-  { n: 4, label: "Guardrails", done: false },
+  { n: 1, label: "Core RAG (ingest → pgvector → rerank)", done: true },
+  { n: 2, label: "RBAC via Postgres RLS", done: true },
+  { n: 3, label: "Multi-agent + web search", done: true },
+  { n: 4, label: "Guardrails", done: true },
   { n: 5, label: "LoRA fine-tune + RAGAS", done: false },
   { n: 6, label: "Eval gate + cloud demo", done: false },
 ];
@@ -43,11 +45,17 @@ export default function Home() {
           cheap to demo in the cloud.
         </p>
         <div className="flex flex-wrap gap-3 pt-2 text-sm">
-          <a
+          <Link
             className="rounded-md bg-foreground px-4 py-2 font-medium text-background transition-opacity hover:opacity-90"
+            href="/chat"
+          >
+            Open chat →
+          </Link>
+          <a
+            className="rounded-md border border-black/15 px-4 py-2 font-medium transition-colors hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
             href="http://localhost:8000/docs"
           >
-            API docs →
+            API docs
           </a>
           <a
             className="rounded-md border border-black/15 px-4 py-2 font-medium transition-colors hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"

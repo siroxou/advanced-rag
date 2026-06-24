@@ -73,8 +73,55 @@ make web               # Next.js  → http://localhost:3000
 Smoke-test the model path without the DB:
 
 ```bash
-curl -s localhost:8000/api/health | jq      # {"status":"ok","llm_reachable":true,...}
+curl -s localhost:8000/api/health | jq      # {"status":"ok","llm_reachable":true,"db_reachable":...}
 ```
+
+> No Docker? Any Postgres 16+ with the `pgvector` extension works - point `DATABASE_URL` at it
+> (`CREATE EXTENSION vector;`) and skip `make up`.
+
+## Ingest documents and chat (Phase 1 + 2)
+
+```bash
+make migrate                              # schema + pgvector indexes + Row-Level Security policies
+make seed                                 # demo users: viewer / analyst / admin (password: demo)
+make corpus                               # download a few sample arXiv PDFs (or drop your own in backend/data/raw)
+make ingest ROLES=viewer,analyst,admin    # PDF → chunk → BGE-M3 embed → pgvector, tagged with these roles
+```
+
+Open `http://localhost:3000/chat`, **sign in**, and ask. Your roles come from the login (a signed
+JWT), not the request - answers are grounded in the retrieved chunks with inline `[n]` citations,
+and the model refuses when the documents your roles can see do not support an answer.
+
+**RBAC at the retrieval layer (the headline).** Tag documents for different roles, and Postgres
+**Row-Level Security** filters them per request - a `viewer` cannot retrieve, or even rank
+against, an `admin`-only chunk:
+
+```bash
+cd backend
+uv run python -m app.ingestion.cli --input data/raw/public.pdf     --source-id demo --roles viewer,analyst,admin --sensitivity public
+uv run python -m app.ingestion.cli --input data/raw/restricted.pdf --source-id demo --roles admin                --sensitivity restricted
+# sign in as viewer, ask about the restricted doc → "I don't have enough information ..."  (no leak)
+# sign in as admin,  ask the same question        → grounded answer with a [n] citation
+```
+
+The guarantee is enforced by the database, not the app: a raw `SELECT * FROM chunks` with no
+WHERE clause returns only the rows the caller's roles permit. Retrieval itself is hybrid (dense
+pgvector + sparse full-text, fused with RRF) then a BGE cross-encoder rerank.
+See [ADR-0005](docs/adr/0005-hybrid-retrieval.md) and [ADR-0006](docs/adr/0006-rls-enforcement.md).
+
+**Multi-agent and context-aware (Phase 3).** Each query runs through a LangGraph supervisor:
+a context agent rewrites the latest message into a standalone query using the conversation (so
+"and what is *its* codename?" resolves correctly), routes to retrieval and - when warranted and
+the role permits - a Tavily web-search agent, then a synthesis agent answers with citations. The
+UI shows the rewritten query and whether web search ran. Web search is optional: without
+`TAVILY_API_KEY` the graph degrades to documents-only. See
+[ADR-0007](docs/adr/0007-agentic-orchestration.md).
+
+**Layered guardrails (Phase 4).** Input is screened for prompt-injection / jailbreaks and
+blocked before any retrieval ("ignore all previous instructions ..." never reaches the model);
+output is checked so every inline `[n]` citation maps to a real source and scanned for PII, with
+verdicts surfaced in the UI. Heavy options (ShieldGemma, Presidio, a trained classifier) are
+drop-in points, not dependencies. See [ADR-0008](docs/adr/0008-layered-guardrails.md).
 
 ## Repository layout
 
@@ -89,17 +136,17 @@ docs/       architecture · ADRs · threat model · runbook
 ## Roadmap
 
 - [x] **Phase 0** - Scaffold, inference abstraction (Gemma 4 verified), CI, docs
-- [ ] **Phase 1** - Core RAG: ingestion → pgvector → hybrid retrieval + rerank → chat
-- [ ] **Phase 2** - RBAC via Postgres RLS, audit log, admin UI
-- [ ] **Phase 3** - LangGraph multi-agent + memory + Tavily web search
-- [ ] **Phase 4** - Guardrails (ShieldGemma, grounding, injection, PII)
-- [ ] **Phase 5** - LoRA fine-tune (MLX), RAGAS before/after, model card
+- [x] **Phase 1** - Core RAG: ingestion → pgvector → hybrid retrieval + rerank → grounded, cited chat
+- [x] **Phase 2** - RBAC via Postgres RLS: JWT auth, roles enforced in-database, append-only audit log
+- [x] **Phase 3** - LangGraph agents: context-rewrite + retrieval + permission-gated web search
+- [x] **Phase 4** - Layered guardrails: injection blocking, grounding/citation validation, PII scan
+- [ ] **Phase 5** - LoRA fine-tune: dataset generator + MLX config + eval harness + model card ready; training run pending
 - [ ] **Phase 6** - Eval gate, LangFuse, cloud demo, Helm/Terraform artifacts
 
 ## Documentation
 
 - [Architecture](docs/architecture.md) · [Threat model](docs/threat-model.md) · [Runbook](docs/runbook.md)
-- ADRs: [local Gemma on Apple Silicon](docs/adr/0002-local-gemma-on-apple-silicon.md) · [pgvector + RLS for RBAC](docs/adr/0003-pgvector-rls-for-rbac.md) · [IaC as artifact](docs/adr/0004-iac-as-artifact.md)
+- ADRs: [local Gemma on Apple Silicon](docs/adr/0002-local-gemma-on-apple-silicon.md) · [pgvector + RLS for RBAC](docs/adr/0003-pgvector-rls-for-rbac.md) · [IaC as artifact](docs/adr/0004-iac-as-artifact.md) · [hybrid retrieval](docs/adr/0005-hybrid-retrieval.md) · [RLS enforcement](docs/adr/0006-rls-enforcement.md) · [agentic orchestration](docs/adr/0007-agentic-orchestration.md) · [layered guardrails](docs/adr/0008-layered-guardrails.md)
 
 ## License
 

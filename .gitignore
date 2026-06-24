@@ -27,6 +27,7 @@ adapters/
 *.gguf
 *.safetensors
 *.bin
+ml/datasets/*.jsonl
 
 # --- OS / editor / local tooling ---
 .DS_Store
