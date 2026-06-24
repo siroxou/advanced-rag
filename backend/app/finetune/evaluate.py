@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -39,7 +40,7 @@ def _is_refusal(answer: str) -> bool:
     return answer.strip().lower().startswith("i don't have enough")
 
 
-async def _run(records: list[dict[str, Any]]) -> None:
+async def _run(records: list[dict[str, Any]], min_citation_rate: float = 0.0) -> None:
     llm = get_llm()
 
     answered = cited_ok = refusal_total = refused_ok = 0
@@ -62,13 +63,16 @@ async def _run(records: list[dict[str, Any]]) -> None:
                 ok = validate_citations(answer, n_sources).allowed and not _is_refusal(answer)
                 cited_ok += int(ok)
 
+    citation_rate = cited_ok / answered if answered else 1.0
     print(f"model: {llm.model}  (n={len(records)})")
     if answered:
-        rate = cited_ok / answered
-        print(f"valid-citation answers: {cited_ok}/{answered} ({rate:.0%})")
+        print(f"valid-citation answers: {cited_ok}/{answered} ({citation_rate:.0%})")
     if refusal_total:
-        rate = refused_ok / refusal_total
-        print(f"correct refusals: {refused_ok}/{refusal_total} ({rate:.0%})")
+        print(f"correct refusals: {refused_ok}/{refusal_total} ({refused_ok / refusal_total:.0%})")
+
+    if min_citation_rate and citation_rate < min_citation_rate:
+        print(f"FAIL: citation rate {citation_rate:.0%} < threshold {min_citation_rate:.0%}")
+        sys.exit(1)
 
 
 def main() -> None:
@@ -76,13 +80,19 @@ def main() -> None:
     parser.add_argument(
         "--data", required=True, help="JSONL dataset (e.g. ml/datasets/valid.jsonl)"
     )
+    parser.add_argument(
+        "--min-citation-rate",
+        type=float,
+        default=0.0,
+        help="Exit non-zero if the valid-citation rate falls below this (CI gate)",
+    )
     args = parser.parse_args()
     records = [
         json.loads(line)
         for line in Path(args.data).read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
-    asyncio.run(_run(records))
+    asyncio.run(_run(records, args.min_citation_rate))
 
 
 if __name__ == "__main__":

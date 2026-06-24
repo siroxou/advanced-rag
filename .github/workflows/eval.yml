@@ -1,0 +1,50 @@
+name: RAG eval gate
+
+# Quality gate: builds a grounded set and checks citation accuracy against a
+# configured model endpoint. Runs on demand and nightly (not on every PR), so it
+# never blocks normal development on GPU/model availability. Configure the
+# EVAL_LLM_* repository secrets to point at a hosted OpenAI-compatible endpoint
+# (e.g. the Modal vLLM deployment).
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
+
+jobs:
+  eval:
+    name: Citation accuracy gate
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: rag
+          POSTGRES_PASSWORD: rag
+          POSTGRES_DB: rag
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://rag:rag@localhost:5432/rag
+      LLM_PROVIDER: ${{ secrets.EVAL_LLM_PROVIDER }}
+      LLM_BASE_URL: ${{ secrets.EVAL_LLM_BASE_URL }}
+      LLM_MODEL: ${{ secrets.EVAL_LLM_MODEL }}
+      LLM_API_KEY: ${{ secrets.EVAL_LLM_API_KEY }}
+      EMBEDDING_DEVICE: cpu
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --extra ml
+      - run: uv run alembic upgrade head
+      - run: uv run python -m app.security.seed
+      - run: uv run python ../scripts/fetch_sample_corpus.py
+      - run: uv run python -m app.ingestion.cli --input data/raw --source-id arxiv --roles viewer,analyst,admin
+      - run: uv run python -m app.finetune.dataset --limit 30
+      - run: uv run python -m app.finetune.evaluate --data ../ml/datasets/valid.jsonl --min-citation-rate 0.8

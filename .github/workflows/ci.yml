@@ -47,5 +47,19 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
-  # Phase 6 adds a `rag-eval` job here that runs the RAGAS golden-set and fails
-  # the build on faithfulness/answer-relevancy regressions (quality gate).
+  iac:
+    name: IaC (helm · terraform validate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm lint infra/helm
+      - run: helm template advanced-rag infra/helm > /dev/null
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform -chdir=infra/terraform fmt -check
+      - run: terraform -chdir=infra/terraform init -backend=false
+      - run: terraform -chdir=infra/terraform validate
+
+  # The RAG quality gate (citation accuracy / faithfulness) runs in
+  # .github/workflows/eval.yml against a configured model endpoint, on demand and
+  # nightly, so it never blocks a PR on GPU availability.

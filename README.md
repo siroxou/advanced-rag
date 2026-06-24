@@ -141,7 +141,7 @@ docs/       architecture · ADRs · threat model · runbook
 - [x] **Phase 3** - LangGraph agents: context-rewrite + retrieval + permission-gated web search
 - [x] **Phase 4** - Layered guardrails: injection blocking, grounding/citation validation, PII scan
 - [ ] **Phase 5** - LoRA fine-tune: dataset generator + MLX config + eval harness + model card ready; training run pending
-- [ ] **Phase 6** - Eval gate, LangFuse, cloud demo, Helm/Terraform artifacts
+- [ ] **Phase 6** - Helm + Terraform + Modal artifacts, CI eval gate, LangFuse hook ready (CI-validated); live cloud deploy pending
 
 ## Documentation
 
