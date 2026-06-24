@@ -1,0 +1,58 @@
+# Default values for the advanced-rag chart. Override per environment.
+
+image:
+  registry: ghcr.io
+  repository: siroxou/advanced-rag
+  tag: latest
+  pullPolicy: IfNotPresent
+
+backend:
+  replicas: 2
+  port: 8000
+  # Non-secret config. Secrets (DATABASE_URL, JWT_SECRET, TAVILY_API_KEY, ...)
+  # come from the referenced Kubernetes Secret, not from here.
+  env:
+    ENVIRONMENT: cloud
+    LLM_PROVIDER: vllm
+    LLM_MODEL: google/gemma-4-e4b-it
+    LLM_BASE_URL: http://advanced-rag-vllm:8000/v1
+    LLM_ENABLE_THINKING: "false"
+    EMBEDDING_DEVICE: cpu
+    CORS_ORIGINS: https://rag.example.com
+  resources:
+    requests: { cpu: "250m", memory: "512Mi" }
+    limits: { cpu: "1", memory: "1Gi" }
+
+frontend:
+  replicas: 2
+  port: 3000
+  env:
+    NEXT_PUBLIC_API_URL: https://api.rag.example.com
+  resources:
+    requests: { cpu: "100m", memory: "256Mi" }
+    limits: { cpu: "500m", memory: "512Mi" }
+
+# Backend secret (provided out-of-band via sealed-secrets / external-secrets).
+secretName: advanced-rag-secrets
+
+# vLLM on a GPU node pool. Disabled by default so a normal `helm install` does not
+# request a (costly) GPU; enable per environment. See ADR-0002 and ADR-0004.
+vllm:
+  enabled: false
+  model: google/gemma-4-e4b-it
+  port: 8000
+  nodeSelector:
+    cloud.google.com/gke-accelerator: nvidia-l4
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+  resources:
+    limits:
+      nvidia.com/gpu: 1
+      memory: 24Gi
+
+ingress:
+  enabled: true
+  className: nginx
+  host: rag.example.com

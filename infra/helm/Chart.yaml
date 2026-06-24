@@ -1,0 +1,8 @@
+apiVersion: v2
+name: advanced-rag
+description: Enterprise Agentic RAG - backend, frontend, and optional vLLM GPU serving
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+maintainers:
+  - name: Siroxou
