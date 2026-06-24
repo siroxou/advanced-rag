@@ -27,6 +27,7 @@ dependencies = [
 ml = [
     "sentence-transformers>=3.3",
     "pymupdf>=1.24",
+    "datasets>=3.0",  # ingest HuggingFace text datasets (e.g. medical Q&A corpora)
 ]
 dev = [
     "pytest>=8.3",

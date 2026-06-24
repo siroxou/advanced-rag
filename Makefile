@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install api web up down lint fmt test pull-model check migrate corpus ingest classify ingest-auto seed dataset eval-lora
+.PHONY: help install api web up down lint fmt test pull-model check migrate corpus ingest classify ingest-auto hf-ingest seed dataset eval-lora
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -44,6 +44,12 @@ classify: ## Preview AI-proposed RBAC tiers for backend/data/raw (no DB writes)
 ingest-auto: ## Ingest backend/data/raw with AI-assigned RBAC tiers (fails closed)
 	cd backend && uv run python -m app.ingestion.cli \
 		--input data/raw --source-id $(or $(SOURCE),corpus) --classify
+
+hf-ingest: ## Ingest a HuggingFace text dataset (override DATASET=... LIMIT=... ROLES=...)
+	cd backend && uv run python -m app.ingestion.hf_cli \
+		--dataset $(or $(DATASET),Postzeun/Patient-Doctor) --limit $(or $(LIMIT),100) \
+		--roles $(or $(ROLES),analyst,admin) --sensitivity $(or $(SENSITIVITY),internal) \
+		--record-prefix $(or $(PREFIX),"This is a conversation between a patient and a doctor")
 
 api: ## Run the FastAPI backend → http://localhost:8000
 	cd backend && uv run uvicorn app.main:app --reload --port 8000

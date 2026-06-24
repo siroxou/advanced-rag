@@ -104,6 +104,22 @@ It is a convenience, not the security boundary (RLS is); `make classify` is the
 human-review step, and the tier, rationale, and an `auto_classified` flag are
 stored on each document row for audit. Explicit `--roles` still overrides.
 
+**Ingest a HuggingFace dataset (not just PDFs).** Many corpora ship as dataset
+rows. The same chunk -> embed -> RLS-tagged pipeline ingests them, streaming so
+`--limit` never has to materialise the whole set:
+
+```bash
+# 100 medical patient-doctor conversations, tagged clinician-only (analyst/admin)
+make hf-ingest                              # defaults to Postzeun/Patient-Doctor
+make hf-ingest DATASET=org/name LIMIT=200 ROLES=admin SENSITIVITY=restricted
+```
+
+That dataset is line-delimited (one line per row), so the ingester groups
+consecutive lines back into whole conversations via `--record-prefix` before
+chunking - otherwise each row would become a meaningless few-character chunk.
+Medical records make the RBAC story concrete: tag them `analyst,admin` and a
+`viewer` is refused every chunk while a clinician role retrieves and cites them.
+
 Open `http://localhost:3000/chat`, **sign in**, and ask. Your roles come from the login (a signed
 JWT), not the request - answers are grounded in the retrieved chunks with inline `[n]` citations,
 and the model refuses when the documents your roles can see do not support an answer.
