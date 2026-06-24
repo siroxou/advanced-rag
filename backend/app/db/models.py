@@ -34,6 +34,12 @@ class Document(Base):
     title: Mapped[str] = mapped_column(Text)
     uri: Mapped[str | None] = mapped_column(Text, nullable=True)
     n_pages: Mapped[int] = mapped_column(default=0)
+    # --- Governance audit trail ------------------------------------------------
+    # The access tier and (when assigned by the auto-classifier) the rationale,
+    # so "why is this admin-only?" is answerable from the row itself.
+    sensitivity: Mapped[str] = mapped_column(Text, server_default=text("'internal'"))
+    classification_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    auto_classified: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     chunks: Mapped[list[Chunk]] = relationship(

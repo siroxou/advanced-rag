@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install api web up down lint fmt test pull-model check migrate corpus ingest seed dataset eval-lora
+.PHONY: help install api web up down lint fmt test pull-model check migrate corpus ingest classify ingest-auto seed dataset eval-lora
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -36,6 +36,14 @@ corpus: ## Download a small sample PDF corpus into backend/data/raw
 ingest: ## Ingest backend/data/raw into the corpus (override ROLES=... SOURCE=...)
 	cd backend && uv run python -m app.ingestion.cli \
 		--input data/raw --source-id $(or $(SOURCE),corpus) --roles $(or $(ROLES),viewer,analyst,admin)
+
+classify: ## Preview AI-proposed RBAC tiers for backend/data/raw (no DB writes)
+	cd backend && uv run python -m app.ingestion.cli \
+		--input data/raw --source-id $(or $(SOURCE),corpus) --classify --dry-run
+
+ingest-auto: ## Ingest backend/data/raw with AI-assigned RBAC tiers (fails closed)
+	cd backend && uv run python -m app.ingestion.cli \
+		--input data/raw --source-id $(or $(SOURCE),corpus) --classify
 
 api: ## Run the FastAPI backend → http://localhost:8000
 	cd backend && uv run uvicorn app.main:app --reload --port 8000

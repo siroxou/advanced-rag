@@ -47,6 +47,8 @@ async def ingest_pdf(
     source_id: str,
     allowed_roles: list[str],
     sensitivity: str = "internal",
+    classification_reason: str | None = None,
+    auto_classified: bool = False,
 ) -> IngestStats:
     """Ingest one PDF and commit. Returns per-file stats."""
     pages = extract_pages(path)
@@ -70,7 +72,15 @@ async def ingest_pdf(
 
     vectors = get_embedder().encode([u[2] for u in units])
 
-    doc = Document(source_id=source_id, title=title, uri=str(path), n_pages=len(pages))
+    doc = Document(
+        source_id=source_id,
+        title=title,
+        uri=str(path),
+        n_pages=len(pages),
+        sensitivity=sensitivity,
+        classification_reason=classification_reason,
+        auto_classified=auto_classified,
+    )
     session.add(doc)
     await session.flush()  # populate doc.id
 

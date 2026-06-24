@@ -88,6 +88,22 @@ make corpus                               # download a few sample arXiv PDFs (or
 make ingest ROLES=viewer,analyst,admin    # PDF → chunk → BGE-M3 embed → pgvector, tagged with these roles
 ```
 
+**Or just drop files and let the model tier them.** Instead of tagging roles by
+hand, the ingester can read each document and assign its access tier (which maps
+to `allowed_roles`) automatically:
+
+```bash
+make classify       # preview: print the proposed tier + reason per file, write nothing
+make ingest-auto    # commit: ingest backend/data/raw with the AI-assigned tiers
+```
+
+Classification **fails closed** - an unreadable document, a model outage, or
+high-confidence PII (SSNs, card numbers) lands a file in the most restrictive
+tier (admin-only) rather than the most open one, so a misjudgement never leaks.
+It is a convenience, not the security boundary (RLS is); `make classify` is the
+human-review step, and the tier, rationale, and an `auto_classified` flag are
+stored on each document row for audit. Explicit `--roles` still overrides.
+
 Open `http://localhost:3000/chat`, **sign in**, and ask. Your roles come from the login (a signed
 JWT), not the request - answers are grounded in the retrieved chunks with inline `[n]` citations,
 and the model refuses when the documents your roles can see do not support an answer.
