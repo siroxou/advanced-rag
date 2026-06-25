@@ -1,18 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-import { API_BASE, clearToken, fetchMe, getToken, login, setToken, type User } from "@/lib/auth";
-
-type Source = {
-  n: number;
-  doc_id: string;
-  source_id: string;
-  citation_anchor: string;
-  page: number;
-  score: number;
-};
+import Sidebar from "@/components/Sidebar";
+import { API_BASE, type Source } from "@/lib/api";
 
 type Guardrails = {
   input_blocked?: boolean;
@@ -37,74 +28,7 @@ const EXAMPLES = [
   "What are the reported limitations?",
 ];
 
-function LoginForm({ onLogin }: { onLogin: (token: string, user: User) => void }) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const { token, user } = await login(username, password);
-      setToken(token);
-      onLogin(token, user);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "login failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <main className="mx-auto flex h-dvh max-w-sm flex-col justify-center gap-6 px-6">
-      <div>
-        <Link href="/" className="text-xs text-black/50 hover:underline dark:text-white/50">
-          &larr; Home
-        </Link>
-        <h1 className="mt-1 text-2xl font-bold">Sign in</h1>
-        <p className="mt-1 text-sm text-black/55 dark:text-white/55">
-          Your roles come from this login and are enforced by the database at the retrieval layer.
-        </p>
-      </div>
-      <form onSubmit={submit} className="flex flex-col gap-3">
-        <input
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder="Username"
-          autoComplete="username"
-          className="rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/50"
-        />
-        <input
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          type="password"
-          placeholder="Password"
-          autoComplete="current-password"
-          className="rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 dark:border-white/20 dark:focus:border-white/50"
-        />
-        <button
-          type="submit"
-          disabled={busy || !username || !password}
-          className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
-        >
-          {busy ? "..." : "Sign in"}
-        </button>
-        {error && <p className="text-xs text-red-500">{error}</p>}
-      </form>
-      <p className="text-center text-xs text-black/40 dark:text-white/40">
-        Demo users: <code>viewer</code> / <code>analyst</code> / <code>admin</code> &middot; password{" "}
-        <code>demo</code>
-      </p>
-    </main>
-  );
-}
-
 export default function ChatPage() {
-  const [ready, setReady] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
@@ -112,36 +36,13 @@ export default function ChatPage() {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) {
-      setReady(true);
-      return;
-    }
-    fetchMe(token)
-      .then(setUser)
-      .catch(() => clearToken())
-      .finally(() => setReady(true));
-  }, []);
-
-  useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  function logout() {
-    clearToken();
-    setUser(null);
-    setMessages([]);
-  }
 
   async function send(text?: string) {
     const q = (text ?? input).trim();
     if (!q || busy) return;
     setError(null);
-    const token = getToken();
-    if (!token) {
-      logout();
-      return;
-    }
 
     const outgoing = [
       ...messages.map((m) => ({ role: m.role, content: m.content })),
@@ -154,13 +55,9 @@ export default function ChatPage() {
     try {
       const res = await fetch(`${API_BASE}/api/chat/stream`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: outgoing, use_rag: true }),
       });
-      if (res.status === 401) {
-        logout();
-        return;
-      }
       if (!res.ok || !res.body) throw new Error(`API returned ${res.status}`);
 
       const reader = res.body.getReader();
@@ -233,151 +130,130 @@ export default function ChatPage() {
     }
   }
 
-  if (!ready) return null;
-  if (!user) return <LoginForm onLogin={(_, u) => setUser(u)} />;
-
   return (
-    <main className="mx-auto flex h-dvh max-w-3xl flex-col px-4">
-      <header className="flex items-center justify-between gap-4 border-b border-black/10 py-4 dark:border-white/10">
-        <div>
-          <Link href="/" className="text-xs text-black/50 hover:underline dark:text-white/50">
-            &larr; Home
-          </Link>
-          <h1 className="text-lg font-semibold">Grounded chat</h1>
-        </div>
-        <div className="flex flex-col items-end gap-1">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">{user.username}</span>
-            <button
-              onClick={logout}
-              className="rounded-md border border-black/15 px-2 py-1 text-xs transition-colors hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
-            >
-              Sign out
-            </button>
-          </div>
-          <div className="flex gap-1">
-            {user.roles.map((r) => (
-              <span
-                key={r}
-                className="rounded-full border border-black/15 px-2 py-0.5 text-[11px] text-black/55 dark:border-white/20 dark:text-white/55"
-              >
-                {r}
-              </span>
-            ))}
-          </div>
-        </div>
-      </header>
-
-      <div className="flex-1 space-y-5 overflow-y-auto py-6">
-        {messages.length === 0 && (
-          <div className="flex flex-col gap-3 pt-10 text-center">
-            <p className="text-sm text-black/50 dark:text-white/50">
-              Ask a question grounded in the documents your roles can see. Answers cite their
-              sources; the model refuses when the corpus does not support an answer.
+    <Sidebar>
+      <div className="mx-auto flex h-dvh max-w-3xl flex-col px-4">
+        {/* Header */}
+        <header className="flex items-center justify-between border-b border-black/10 py-4 dark:border-white/10">
+          <div>
+            <h1 className="text-lg font-semibold">Grounded Chat</h1>
+            <p className="text-xs text-black/50 dark:text-white/50">
+              Ask questions grounded in your documents.
             </p>
-            <div className="mx-auto flex max-w-md flex-col gap-2 pt-2">
-              {EXAMPLES.map((ex) => (
-                <button
-                  key={ex}
-                  onClick={() => send(ex)}
-                  className="rounded-lg border border-black/10 px-3 py-2 text-left text-sm transition-colors hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10"
-                >
-                  {ex}
-                </button>
-              ))}
-            </div>
           </div>
-        )}
+        </header>
 
-        {messages.map((m, i) => {
-          const prevUser = m.role === "assistant" ? messages[i - 1]?.content : undefined;
-          const showRewrite =
-            !!m.rewrittenQuery &&
-            !!prevUser &&
-            m.rewrittenQuery.trim().toLowerCase() !== prevUser.trim().toLowerCase();
-          return (
-            <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
-              <div
-                className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
-                  m.role === "user"
-                    ? "bg-foreground text-background"
-                    : "border border-black/10 dark:border-white/10"
-                }`}
-              >
-                {m.content || (busy && i === messages.length - 1 ? "..." : "")}
-                {m.role === "assistant" && (m.usedWeb || showRewrite) && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-black/40 dark:text-white/40">
-                    {m.usedWeb && (
-                      <span className="rounded-full border border-black/15 px-1.5 py-0.5 dark:border-white/20">
-                        web
-                      </span>
-                    )}
-                    {showRewrite && <span className="italic">searched: {m.rewrittenQuery}</span>}
-                  </div>
-                )}
-                {m.role === "assistant" &&
-                  m.guardrails &&
-                  (m.guardrails.grounding_ok === false ||
-                    (m.guardrails.pii_found?.length ?? 0) > 0) && (
-                    <div className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-700 dark:text-amber-400">
-                      {m.guardrails.grounding_ok === false && (
-                        <span>Guardrail: citation check flagged unsupported references. </span>
-                      )}
-                      {(m.guardrails.pii_found?.length ?? 0) > 0 && (
-                        <span>Guardrail: possible PII in output ({m.guardrails.pii_found?.join(", ")}).</span>
-                      )}
-                    </div>
-                  )}
-                {m.role === "assistant" && m.sources && m.sources.length > 0 && (
-                <div className="mt-3 flex flex-col gap-1 border-t border-black/10 pt-2 dark:border-white/10">
-                  <span className="text-[11px] font-semibold tracking-wide text-black/40 uppercase dark:text-white/40">
-                    Sources
-                  </span>
-                  {m.sources.map((s) => (
-                    <div key={s.n} className="text-[11px] text-black/55 dark:text-white/55">
-                      <span className="font-mono">[{s.n}]</span> {s.citation_anchor}{" "}
-                      <span className="text-black/35 dark:text-white/35">
-                        ({s.source_id} &middot; {s.score.toFixed(3)})
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
+        {/* Messages */}
+        <div className="flex-1 space-y-5 overflow-y-auto py-6">
+          {messages.length === 0 && (
+            <div className="flex flex-col gap-3 pt-10 text-center">
+              <p className="text-sm text-black/50 dark:text-white/50">
+                Ask a question grounded in the documents.
+              </p>
+              <div className="mx-auto flex max-w-md flex-col gap-2 pt-2">
+                {EXAMPLES.map((ex) => (
+                  <button
+                    key={ex}
+                    onClick={() => send(ex)}
+                    className="rounded-lg border border-black/10 px-3 py-2 text-left text-sm transition-colors hover:bg-black/5 dark:border-white/10 dark:hover:bg-white/10"
+                  >
+                    {ex}
+                  </button>
+                ))}
               </div>
             </div>
+          )}
+
+          {messages.map((m, i) => {
+            const prevUser = m.role === "assistant" ? messages[i - 1]?.content : undefined;
+            const showRewrite =
+              !!m.rewrittenQuery &&
+              !!prevUser &&
+              m.rewrittenQuery.trim().toLowerCase() !== prevUser.trim().toLowerCase();
+            return (
+              <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+                <div
+                  className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
+                    m.role === "user"
+                      ? "bg-blue-600 text-white"
+                      : "border border-black/10 dark:border-white/10"
+                  }`}
+                >
+                  {m.content || (busy && i === messages.length - 1 ? "..." : "")}
+                  {m.role === "assistant" && (m.usedWeb || showRewrite) && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-black/40 dark:text-white/40">
+                      {m.usedWeb && (
+                        <span className="rounded-full border border-black/15 px-1.5 py-0.5 dark:border-white/20">
+                          web
+                        </span>
+                      )}
+                      {showRewrite && <span className="italic">searched: {m.rewrittenQuery}</span>}
+                    </div>
+                  )}
+                  {m.role === "assistant" &&
+                    m.guardrails &&
+                    (m.guardrails.grounding_ok === false ||
+                      (m.guardrails.pii_found?.length ?? 0) > 0) && (
+                      <div className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-700 dark:text-amber-400">
+                        {m.guardrails.grounding_ok === false && (
+                          <span>Guardrail: citation check flagged unsupported references. </span>
+                        )}
+                        {(m.guardrails.pii_found?.length ?? 0) > 0 && (
+                          <span>Guardrail: possible PII in output ({m.guardrails.pii_found?.join(", ")}).</span>
+                        )}
+                      </div>
+                    )}
+                  {m.role === "assistant" && m.sources && m.sources.length > 0 && (
+                    <div className="mt-3 flex flex-col gap-1 border-t border-black/10 pt-2 dark:border-white/10">
+                      <span className="text-[11px] font-semibold tracking-wide text-black/40 uppercase dark:text-white/40">
+                        Sources
+                      </span>
+                      {m.sources.map((s) => (
+                        <div key={s.n} className="text-[11px] text-black/55 dark:text-white/55">
+                          <span className="font-mono">[{s.n}]</span> {s.citation_anchor}{" "}
+                          <span className="text-black/35 dark:text-white/35">
+                            ({s.source_id} · {s.score.toFixed(3)})
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             );
           })}
-        <div ref={endRef} />
-      </div>
+          <div ref={endRef} />
+        </div>
 
-      {error && (
-        <p className="pb-2 text-center text-xs text-red-500">
-          {error}. Is the API up at {API_BASE}?
-        </p>
-      )}
+        {error && (
+          <p className="pb-2 text-center text-xs text-red-500">
+            {error}. Is the API up at {API_BASE}?
+          </p>
+        )}
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          send();
-        }}
-        className="flex gap-2 border-t border-black/10 py-4 dark:border-white/10"
-      >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask the corpus..."
-          disabled={busy}
-          className="flex-1 rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-black/40 disabled:opacity-60 dark:border-white/20 dark:focus:border-white/50"
-        />
-        <button
-          type="submit"
-          disabled={busy || !input.trim()}
-          className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            send();
+          }}
+          className="flex gap-2 border-t border-black/10 py-4 dark:border-white/10"
         >
-          {busy ? "..." : "Send"}
-        </button>
-      </form>
-    </main>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask the corpus..."
+            disabled={busy}
+            className="flex-1 rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-blue-500 disabled:opacity-60 dark:border-white/20 dark:focus:border-blue-400"
+          />
+          <button
+            type="submit"
+            disabled={busy || !input.trim()}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-opacity hover:bg-blue-700 disabled:opacity-40"
+          >
+            {busy ? "..." : "Send"}
+          </button>
+        </form>
+      </div>
+    </Sidebar>
   );
 }
