@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
 from app.core.logging import get_logger
@@ -45,6 +46,7 @@ async def ingest_preset(
     sensitivity: str = "",
     roles: str = "",
     classify: bool = False,
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Ingest a corpus preset by name."""
     preset = get_preset(name)
@@ -57,33 +59,33 @@ async def ingest_preset(
 
     llm = get_llm() if classify else None
 
-    async with get_session() as session:
-        if preset.kind == "text":
-            stats = await ingest_hf(
-                session,
-                dataset=preset.dataset,
-                split=preset.split,
-                text_column=preset.text_column,
-                allowed_roles=preset_roles,
-                sensitivity=preset_sensitivity,
-                limit=limit,
-                record_prefix=preset.record_prefix,
-                classify_each=classify,
-                llm=llm,
-            )
-        else:
-            stats = await ingest_hf_pdfs(
-                session,
-                dataset=preset.dataset,
-                split=preset.split,
-                pdf_column=preset.pdf_column,
-                allowed_roles=preset_roles,
-                sensitivity=preset_sensitivity,
-                limit=limit,
-                classify_each=classify,
-                llm=llm,
-            )
+    if preset.kind == "text":
+        stats = await ingest_hf(
+            session,
+            dataset=preset.dataset,
+            split=preset.split,
+            text_column=preset.text_column,
+            allowed_roles=preset_roles,
+            sensitivity=preset_sensitivity,
+            limit=limit,
+            record_prefix=preset.record_prefix,
+            classify_each=classify,
+            llm=llm,
+        )
+    else:
+        stats = await ingest_hf_pdfs(
+            session,
+            dataset=preset.dataset,
+            split=preset.split,
+            pdf_column=preset.pdf_column,
+            allowed_roles=preset_roles,
+            sensitivity=preset_sensitivity,
+            limit=limit,
+            classify_each=classify,
+            llm=llm,
+        )
 
+    await session.commit()
     return {
         "status": "success",
         "preset": preset.name,
