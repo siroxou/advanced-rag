@@ -104,21 +104,30 @@ It is a convenience, not the security boundary (RLS is); `make classify` is the
 human-review step, and the tier, rationale, and an `auto_classified` flag are
 stored on each document row for audit. Explicit `--roles` still overrides.
 
-**Ingest a HuggingFace dataset (not just PDFs).** Many corpora ship as dataset
-rows. The same chunk -> embed -> RLS-tagged pipeline ingests them, streaming so
-`--limit` never has to materialise the whole set:
+**No PDFs of your own? Use a built-in corpus preset.** Ready-made public
+datasets, ingested through the same chunk -> embed -> RLS-tagged pipeline:
 
 ```bash
-# 100 medical patient-doctor conversations, tagged clinician-only (analyst/admin)
-make hf-ingest                              # defaults to Postzeun/Patient-Doctor
-make hf-ingest DATASET=org/name LIMIT=200 ROLES=admin SENSITIVITY=restricted
+make presets                 # list the presets
+make preset NAME=fred-core   # 32 mixed-domain PDFs (ECB, OECD, arXiv AI)
+make preset NAME=patient-doctor LIMIT=100   # medical conversations, clinician-only
 ```
 
-That dataset is line-delimited (one line per row), so the ingester groups
-consecutive lines back into whole conversations via `--record-prefix` before
-chunking - otherwise each row would become a meaningless few-character chunk.
-Medical records make the RBAC story concrete: tag them `analyst,admin` and a
-`viewer` is refused every chunk while a clinician role retrieves and cites them.
+- `fred-core` carries real PDFs *inside* the dataset; they are decoded straight
+  from the archive and run through the PDF path (the domain - `ECB` / `OCDE` /
+  `ARXIV-AI` - is recovered from each file's path).
+- `patient-doctor` is line-delimited (one line per row), so the ingester groups
+  consecutive lines back into whole conversations before chunking - otherwise
+  each row would become a meaningless few-character chunk. Tagged `analyst,admin`,
+  it makes the RBAC story concrete: a `viewer` is refused every chunk while a
+  clinician role retrieves and cites them.
+
+For any other HuggingFace text dataset, skip the presets and point the ingester
+at it directly (streaming, so `--limit` never materialises the whole set):
+
+```bash
+make hf-ingest DATASET=org/name LIMIT=200 ROLES=admin SENSITIVITY=restricted
+```
 
 Open `http://localhost:3000/chat`, **sign in**, and ask. Your roles come from the login (a signed
 JWT), not the request - answers are grounded in the retrieved chunks with inline `[n]` citations,

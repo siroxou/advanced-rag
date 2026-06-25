@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install api web up down lint fmt test pull-model check migrate corpus ingest classify ingest-auto hf-ingest seed dataset eval-lora
+.PHONY: help install api web up down lint fmt test pull-model check migrate corpus ingest classify ingest-auto hf-ingest presets preset seed dataset eval-lora
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -50,6 +50,13 @@ hf-ingest: ## Ingest a HuggingFace text dataset (override DATASET=... LIMIT=... 
 		--dataset $(or $(DATASET),Postzeun/Patient-Doctor) --limit $(or $(LIMIT),100) \
 		--roles $(or $(ROLES),analyst,admin) --sensitivity $(or $(SENSITIVITY),internal) \
 		--record-prefix $(or $(PREFIX),"This is a conversation between a patient and a doctor")
+
+presets: ## List ready-made corpus presets (no PDFs of your own needed)
+	cd backend && uv run python -m app.ingestion.presets_cli --list
+
+preset: ## Ingest a corpus preset (NAME=fred-core | patient-doctor, override LIMIT=... ROLES=...)
+	cd backend && uv run python -m app.ingestion.presets_cli --name $(or $(NAME),fred-core) \
+		$(if $(LIMIT),--limit $(LIMIT),) $(if $(ROLES),--roles $(ROLES),)
 
 api: ## Run the FastAPI backend → http://localhost:8000
 	cd backend && uv run uvicorn app.main:app --reload --port 8000
