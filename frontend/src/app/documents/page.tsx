@@ -1,11 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import Sidebar from "@/components/Sidebar";
 import { API_BASE, type DocumentInfo } from "@/lib/api";
 
 type UploadState = "idle" | "uploading" | "success" | "error";
+
+type PresetInfo = {
+  name: string;
+  kind: string;
+  dataset: string;
+  description: string;
+  roles: string[];
+  sensitivity: string;
+  default_limit: number | null;
+  notes: string;
+};
+
+type IngestResult = {
+  status: string;
+  preset: string;
+  documents: number;
+  chunks_inserted: number;
+  chunks_skipped: number;
+};
 
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
@@ -15,6 +34,84 @@ export default function DocumentsPage() {
   const [sensitivity, setSensitivity] = useState("internal");
   const [allowedRoles, setAllowedRoles] = useState("viewer");
   const [filterSensitivity, setFilterSensitivity] = useState<string>("all");
+  
+  // Presets state
+  const [presets, setPresets] = useState<PresetInfo[]>([]);
+  const [loadingPresets, setLoadingPresets] = useState(true);
+  const [ingestingPreset, setIngestingPreset] = useState<string | null>(null);
+  const [presetResult, setPresetResult] = useState<IngestResult | null>(null);
+  const [presetError, setPresetError] = useState<string | null>(null);
+  const [showPresetOptions, setShowPresetOptions] = useState<Record<string, boolean>>({});
+  const [presetLimit, setPresetLimit] = useState<Record<string, string>>({});
+  const [presetSensitivity, setPresetSensitivity] = useState<Record<string, string>>({});
+  const [presetRoles, setPresetRoles] = useState<Record<string, string>>({});
+  const [presetClassify, setPresetClassify] = useState<Record<string, boolean>>({});
+
+  async function fetchDocuments() {
+    try {
+      const res = await fetch(`${API_BASE}/api/documents`);
+      if (res.ok) {
+        const docs = await res.json();
+        setDocuments(docs);
+      }
+    } catch (e) {
+      console.error("Failed to fetch documents:", e);
+    }
+  }
+
+  async function fetchPresets() {
+    try {
+      const res = await fetch(`${API_BASE}/api/presets`);
+      if (res.ok) {
+        const data = await res.json();
+        setPresets(data);
+      }
+    } catch (e) {
+      console.error("Failed to fetch presets:", e);
+    } finally {
+      setLoadingPresets(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchPresets();
+  }, []);
+
+  async function handleIngestPreset(name: string) {
+    setIngestingPreset(name);
+    setPresetError(null);
+    setPresetResult(null);
+
+    const limit = presetLimit[name] ? parseInt(presetLimit[name]) : -1;
+    const sensitivity = presetSensitivity[name] || "";
+    const roles = presetRoles[name] || "";
+    const classify = presetClassify[name] || false;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/presets/${name}/ingest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit, sensitivity, roles, classify }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setPresetResult(data);
+        fetchDocuments(); // Refresh document list
+      } else {
+        const err = await res.text();
+        setPresetError(err || "Ingestion failed");
+      }
+    } catch (e) {
+      setPresetError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setIngestingPreset(null);
+    }
+  }
+
+  const togglePresetOptions = (name: string) => {
+    setShowPresetOptions(prev => ({ ...prev, [name]: !prev[name] }));
+  };
 
   async function fetchDocuments() {
     try {
@@ -168,6 +265,161 @@ export default function DocumentsPage() {
                 Dismiss
               </button>
             </div>
+          )}
+        </div>
+
+        {/* Presets Section */}
+        <div className="mt-6 rounded-xl border border-black/10 bg-white p-6 dark:border-white/10 dark:bg-black">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Corpus Presets</h2>
+              <p className="mt-1 text-sm text-black/50 dark:text-white/50">
+                Ready-made public datasets. No PDFs required.
+              </p>
+            </div>
+            {loadingPresets && (
+              <span className="text-xs text-black/40 dark:text-white/40">Loading presets...</span>
+            )}
+          </div>
+
+          {presetResult && (
+            <div className="mt-4 rounded-lg bg-green-50 p-3 dark:bg-green-900/20">
+              <p className="text-xs font-medium text-green-700 dark:text-green-400">
+                ✓ Ingested "{presetResult.preset}": {presetResult.documents} docs, {presetResult.chunks_inserted} chunks
+              </p>
+              <button
+                onClick={() => setPresetResult(null)}
+                className="mt-1 text-xs text-green-600 underline dark:text-green-500"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {presetError && (
+            <div className="mt-4 rounded-lg bg-red-50 p-3 dark:bg-red-900/20">
+              <p className="text-xs font-medium text-red-700 dark:text-red-400">Error: {presetError}</p>
+              <button
+                onClick={() => setPresetError(null)}
+                className="mt-1 text-xs text-red-600 underline dark:text-red-500"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          <div className="mt-4 space-y-3">
+            {presets.map((preset) => (
+              <div key={preset.name} className="rounded-lg border border-black/10 bg-black/[0.02] p-4 dark:border-white/10 dark:bg-white/[0.02]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{preset.name}</span>
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ${
+                        preset.kind === "text" 
+                          ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                          : "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400"
+                      }`}>
+                        {preset.kind}
+                      </span>
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ${
+                        preset.sensitivity === "public" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
+                        preset.sensitivity === "internal" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" :
+                        preset.sensitivity === "confidential" ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" :
+                        "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                      }`}>
+                        {preset.sensitivity}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-black/60 dark:text-white/60">{preset.description}</p>
+                    <p className="mt-1 text-xs text-black/40 dark:text-white/40">
+                      Dataset: {preset.dataset}
+                      {preset.default_limit && ` • Default limit: ${preset.default_limit} records`}
+                      {preset.notes && ` • ${preset.notes}`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleIngestPreset(preset.name)}
+                    disabled={ingestingPreset === preset.name}
+                    className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {ingestingPreset === preset.name ? "Ingesting..." : "Ingest"}
+                  </button>
+                </div>
+
+                {/* Advanced Options */}
+                {showPresetOptions[preset.name] && (
+                  <div className="mt-3 border-t border-black/10 pt-3 dark:border-white/10">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-[10px] font-medium text-black/60 dark:text-white/60">
+                          Limit Records (default: {preset.default_limit || "all"})
+                        </label>
+                        <input
+                          type="number"
+                          value={presetLimit[preset.name] || ""}
+                          onChange={(e) => setPresetLimit(prev => ({ ...prev, [preset.name]: e.target.value }))}
+                          placeholder="Leave empty for preset default"
+                          className="w-full rounded border border-black/15 bg-transparent px-2 py-1 text-xs outline-none focus:border-blue-500 dark:border-white/20 dark:focus:border-blue-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] font-medium text-black/60 dark:text-white/60">
+                          Override Sensitivity
+                        </label>
+                        <select
+                          value={presetSensitivity[preset.name] || ""}
+                          onChange={(e) => setPresetSensitivity(prev => ({ ...prev, [preset.name]: e.target.value }))}
+                          className="w-full rounded border border-black/15 bg-transparent px-2 py-1 text-xs outline-none focus:border-blue-500 dark:border-white/20 dark:focus:border-blue-400"
+                        >
+                          <option value="">Use preset default</option>
+                          <option value="public">Public</option>
+                          <option value="internal">Internal</option>
+                          <option value="confidential">Confidential</option>
+                          <option value="restricted">Restricted</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[10px] font-medium text-black/60 dark:text-white/60">
+                          Override Roles (comma-separated)
+                        </label>
+                        <input
+                          value={presetRoles[preset.name] || ""}
+                          onChange={(e) => setPresetRoles(prev => ({ ...prev, [preset.name]: e.target.value }))}
+                          placeholder="viewer, analyst"
+                          className="w-full rounded border border-black/15 bg-transparent px-2 py-1 text-xs outline-none focus:border-blue-500 dark:border-white/20 dark:focus:border-blue-400"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id={`classify-${preset.name}`}
+                          checked={presetClassify[preset.name] || false}
+                          onChange={(e) => setPresetClassify(prev => ({ ...prev, [preset.name]: e.target.checked }))}
+                          className="h-3 w-3 rounded border-black/30 text-blue-600 focus:ring-blue-500 dark:border-white/30"
+                        />
+                        <label htmlFor={`classify-${preset.name}`} className="text-xs text-black/60 dark:text-white/60">
+                          LLM auto-classify
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => togglePresetOptions(preset.name)}
+                  className="mt-2 text-xs text-blue-600 hover:underline dark:text-blue-400"
+                >
+                  {showPresetOptions[preset.name] ? "Hide Options ▲" : "Advanced Options ▼"}
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {presets.length === 0 && !loadingPresets && (
+            <p className="mt-4 text-center text-xs text-black/40 dark:text-white/40">
+              No presets available. Check your backend configuration.
+            </p>
           )}
         </div>
 
