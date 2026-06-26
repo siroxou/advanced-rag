@@ -2,7 +2,10 @@
  * API client for the Enterprise Agentic RAG backend.
  */
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Empty default = same-origin: the app talks to its own Next.js route handlers
+// (the self-contained Vercel demo). Point NEXT_PUBLIC_API_URL at the FastAPI
+// backend (e.g. http://localhost:8000) to run against the full local stack.
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 const TOKEN_KEY = "rag_token";
 
