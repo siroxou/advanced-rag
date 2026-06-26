@@ -203,6 +203,7 @@ docs/       architecture · ADRs · threat model · runbook
 - [x] **Phase 4** - Layered guardrails: injection blocking, grounding/citation validation, PII scan
 - [ ] **Phase 5** - LoRA fine-tune: dataset generator + MLX config + eval harness + model card ready; training run pending
 - [ ] **Phase 6** - Helm + Terraform + Modal artifacts, CI eval gate, LangFuse hook ready (CI-validated); live cloud deploy pending
+- [x] **Phase 7** - Runtime config + operator controls: live model/provider switching (OpenRouter), bring-your-own key, per-guardrail toggles, PII masking, rate limiting, and in-place document re-tiering
 
 ## Documentation
 

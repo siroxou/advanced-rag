@@ -2,9 +2,15 @@ name: RAG eval gate
 
 # Quality gate: builds a grounded set and checks citation accuracy against a
 # configured model endpoint. Runs on demand and nightly (not on every PR), so it
-# never blocks normal development on GPU/model availability. Configure the
-# EVAL_LLM_* repository secrets to point at a hosted OpenAI-compatible endpoint
-# (e.g. the Modal vLLM deployment).
+# never blocks normal development on GPU/model availability.
+#
+# Easiest setup: add a single repository secret EVAL_LLM_API_KEY with an
+# OpenRouter key - the provider, base URL, and model already default to
+# OpenRouter below. Point EVAL_LLM_BASE_URL / EVAL_LLM_MODEL at a different
+# OpenAI-compatible endpoint (e.g. a Modal vLLM deployment) to override.
+#
+# Until the key is set the job skips cleanly (green, not red) instead of failing
+# nightly with no endpoint to call.
 
 on:
   workflow_dispatch:
@@ -27,24 +33,43 @@ jobs:
           --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     env:
       DATABASE_URL: postgresql+asyncpg://rag:rag@localhost:5432/rag
-      LLM_PROVIDER: ${{ secrets.EVAL_LLM_PROVIDER }}
-      LLM_BASE_URL: ${{ secrets.EVAL_LLM_BASE_URL }}
-      LLM_MODEL: ${{ secrets.EVAL_LLM_MODEL }}
+      LLM_PROVIDER: ${{ secrets.EVAL_LLM_PROVIDER || 'openrouter' }}
+      LLM_BASE_URL: ${{ secrets.EVAL_LLM_BASE_URL || 'https://openrouter.ai/api/v1' }}
+      LLM_MODEL: ${{ secrets.EVAL_LLM_MODEL || 'anthropic/claude-haiku-4.5' }}
       LLM_API_KEY: ${{ secrets.EVAL_LLM_API_KEY }}
       EMBEDDING_DEVICE: cpu
     defaults:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - name: Check for a model endpoint
+        id: gate
+        run: |
+          if [ -z "$LLM_API_KEY" ]; then
+            echo "::notice::EVAL_LLM_API_KEY not set; skipping the eval gate. Add it (an OpenRouter key works) to enable."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.gate.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+      - if: steps.gate.outputs.enabled == 'true'
+        uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-      - run: uv python install 3.12
-      - run: uv sync --extra ml
-      - run: uv run alembic upgrade head
-      - run: uv run python -m app.security.seed
-      - run: uv run python ../scripts/fetch_sample_corpus.py
-      - run: uv run python -m app.ingestion.cli --input data/raw --source-id arxiv --roles viewer,analyst,admin
-      - run: uv run python -m app.finetune.dataset --limit 30
-      - run: uv run python -m app.finetune.evaluate --data ../ml/datasets/valid.jsonl --min-citation-rate 0.8
+      - if: steps.gate.outputs.enabled == 'true'
+        run: uv python install 3.12
+      - if: steps.gate.outputs.enabled == 'true'
+        run: uv sync --extra ml
+      - if: steps.gate.outputs.enabled == 'true'
+        run: uv run alembic upgrade head
+      - if: steps.gate.outputs.enabled == 'true'
+        run: uv run python -m app.security.seed
+      - if: steps.gate.outputs.enabled == 'true'
+        run: uv run python ../scripts/fetch_sample_corpus.py
+      - if: steps.gate.outputs.enabled == 'true'
+        run: uv run python -m app.ingestion.cli --input data/raw --source-id arxiv --roles viewer,analyst,admin
+      - if: steps.gate.outputs.enabled == 'true'
+        run: uv run python -m app.finetune.dataset --limit 30
+      - if: steps.gate.outputs.enabled == 'true'
+        run: uv run python -m app.finetune.evaluate --data ../ml/datasets/valid.jsonl --min-citation-rate 0.8
