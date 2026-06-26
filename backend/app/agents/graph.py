@@ -7,6 +7,7 @@ LLM call, so token streaming stays simple while the routing lives in the graph.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
@@ -59,3 +60,34 @@ async def run_agent(
     config = {"configurable": {"session": session, "llm": llm}}
     result = await _GRAPH.ainvoke(init, config=config)
     return result
+
+
+async def stream_agent(
+    session: AsyncSession,
+    llm: LLMProvider,
+    *,
+    username: str,
+    roles: list[str],
+    query: str,
+    history: list[ChatTurn],
+) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+    """Run the graph node-by-node, yielding ``(node_name, merged_state)`` as each
+    node finishes.
+
+    Same routing as ``run_agent``, but surfaced incrementally so the endpoint can
+    emit live progress events. The merged state accumulates every node's output, so
+    the value yielded after the final node is the complete result.
+    """
+    init: AgentState = {
+        "username": username,
+        "roles": roles,
+        "original_query": query,
+        "history": history,
+    }
+    config = {"configurable": {"session": session, "llm": llm}}
+    merged: dict[str, Any] = dict(init)
+    async for update in _GRAPH.astream(init, config=config, stream_mode="updates"):
+        for node, payload in update.items():
+            if payload:
+                merged.update(payload)
+            yield node, dict(merged)

@@ -23,8 +23,10 @@ class Source(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[ChatTurn] = Field(min_length=1)
-    temperature: float = Field(default=0.2, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=1024, ge=1, le=8192)
+    # None means "use the runtime default" (set on the Settings page); an explicit
+    # value always wins. Kept optional so the server can tell omitted from set.
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    max_tokens: int | None = Field(default=None, ge=1, le=8192)
     # Ground answers in retrieved documents. False falls back to a raw LLM call.
     # NOTE: roles are NOT accepted here - they come only from the verified JWT.
     use_rag: bool = True
