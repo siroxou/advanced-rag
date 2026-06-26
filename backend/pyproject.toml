@@ -53,7 +53,13 @@ select = ["E", "F", "I", "UP", "B", "ASYNC"]
 
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI dependency-injection markers are called in argument defaults by design.
-extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body"]
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.File",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
