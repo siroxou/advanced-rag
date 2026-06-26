@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from sqlalchemy import Table
+from sqlalchemy import Table, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -74,6 +74,16 @@ async def ingest_sections(
         return IngestStats()
 
     vectors = get_embedder().encode([u[2] for u in units])
+
+    # ``chunks`` runs under FORCE row-level security, so the INSERT ... RETURNING
+    # below must also satisfy the SELECT policy to read the new id back. Push this
+    # document's own roles into the per-transaction GUC the policy reads (the same
+    # mechanism the retriever uses), so the just-written rows are visible to the
+    # ingesting transaction. Without it every insert fails closed.
+    await session.execute(
+        text("SELECT set_config('app.user_roles', :roles, true)"),
+        {"roles": ",".join(allowed_roles)},
+    )
 
     doc = Document(
         source_id=source_id,
