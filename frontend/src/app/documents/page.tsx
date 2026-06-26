@@ -1,9 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
+import DocumentPreviewModal from "@/components/DocumentPreviewModal";
 import Sidebar from "@/components/Sidebar";
-import { API_BASE, type DocumentInfo } from "@/lib/api";
+import { API_BASE, updateDocument, type DocumentInfo } from "@/lib/api";
+
+// Default role set per tier, mirroring the backend auto-classifier. Selecting a
+// sensitivity prefills these; the operator can still override.
+const TIER_ROLES: Record<string, string> = {
+  public: "viewer, analyst, admin",
+  internal: "analyst, admin",
+  confidential: "admin",
+  restricted: "admin",
+};
 
 type UploadState = "idle" | "uploading" | "success" | "error";
 
@@ -26,14 +36,31 @@ type IngestResult = {
   chunks_skipped: number;
 };
 
+type UploadResult = {
+  status: string;
+  filename: string;
+  sensitivity: string;
+  roles: string[];
+  documents: number;
+  chunks_inserted: number;
+  chunks_skipped: number;
+};
+
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadResult, setUploadResult] = useState<any>(null);
+  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const [sensitivity, setSensitivity] = useState("internal");
   const [allowedRoles, setAllowedRoles] = useState("viewer");
   const [filterSensitivity, setFilterSensitivity] = useState<string>("all");
+  const [selectedDoc, setSelectedDoc] = useState<DocumentInfo | null>(null);
+  // Inline re-classification editor.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editSensitivity, setEditSensitivity] = useState("internal");
+  const [editRoles, setEditRoles] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   
   // Presets state
   const [presets, setPresets] = useState<PresetInfo[]>([]);
@@ -47,7 +74,7 @@ export default function DocumentsPage() {
   const [presetRoles, setPresetRoles] = useState<Record<string, string>>({});
   const [presetClassify, setPresetClassify] = useState<Record<string, boolean>>({});
 
-  async function fetchDocuments() {
+  const fetchDocuments = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/documents`);
       if (res.ok) {
@@ -57,9 +84,9 @@ export default function DocumentsPage() {
     } catch (e) {
       console.error("Failed to fetch documents:", e);
     }
-  }
+  }, []);
 
-  async function fetchPresets() {
+  const fetchPresets = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/presets`);
       if (res.ok) {
@@ -71,11 +98,16 @@ export default function DocumentsPage() {
     } finally {
       setLoadingPresets(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
+    // On-mount load. State is set only after each fetch resolves (post-await), so
+    // the synchronous cascading-render case this rule guards against doesn't apply.
+    /* eslint-disable react-hooks/set-state-in-effect */
     fetchPresets();
-  }, []);
+    fetchDocuments();
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [fetchPresets, fetchDocuments]);
 
   async function handleIngestPreset(name: string) {
     setIngestingPreset(name);
@@ -113,15 +145,30 @@ export default function DocumentsPage() {
     setShowPresetOptions(prev => ({ ...prev, [name]: !prev[name] }));
   };
 
-  async function fetchDocuments() {
+  function startEdit(doc: DocumentInfo) {
+    setEditingId(doc.id);
+    setEditSensitivity(doc.sensitivity);
+    setEditRoles(TIER_ROLES[doc.sensitivity] ?? "viewer");
+    setEditError(null);
+  }
+
+  function changeEditSensitivity(value: string) {
+    setEditSensitivity(value);
+    setEditRoles(TIER_ROLES[value] ?? editRoles);
+  }
+
+  async function saveEdit(docId: string) {
+    setSavingEdit(true);
+    setEditError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/documents`);
-      if (res.ok) {
-        const docs = await res.json();
-        setDocuments(docs);
-      }
+      const roles = editRoles.split(",").map(r => r.trim()).filter(Boolean);
+      await updateDocument(docId, editSensitivity, roles);
+      setEditingId(null);
+      fetchDocuments();
     } catch (e) {
-      console.error("Failed to fetch documents:", e);
+      setEditError(e instanceof Error ? e.message : "Update failed");
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -285,7 +332,7 @@ export default function DocumentsPage() {
           {presetResult && (
             <div className="mt-4 rounded-lg bg-green-50 p-3 dark:bg-green-900/20">
               <p className="text-xs font-medium text-green-700 dark:text-green-400">
-                ✓ Ingested "{presetResult.preset}": {presetResult.documents} docs, {presetResult.chunks_inserted} chunks
+                ✓ Ingested &ldquo;{presetResult.preset}&rdquo;: {presetResult.documents} docs, {presetResult.chunks_inserted} chunks
               </p>
               <button
                 onClick={() => setPresetResult(null)}
@@ -448,28 +495,103 @@ export default function DocumentsPage() {
             ) : (
               filteredDocs.map((doc) => (
                 <div key={doc.id} className="px-6 py-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
+                  {editingId === doc.id ? (
+                    <div className="flex flex-col gap-3">
                       <p className="font-medium text-sm">{doc.title || doc.source_id}</p>
-                      <p className="mt-1 text-xs text-black/50 dark:text-white/50">
-                        {doc.n_pages} pages • Uploaded {new Date(doc.created_at).toLocaleDateString()}
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <label className="mb-1 block text-[10px] font-medium text-black/60 dark:text-white/60">
+                            Sensitivity
+                          </label>
+                          <select
+                            value={editSensitivity}
+                            onChange={(e) => changeEditSensitivity(e.target.value)}
+                            className="w-full rounded border border-black/15 bg-transparent px-2 py-1 text-xs outline-none focus:border-blue-500 dark:border-white/20 dark:focus:border-blue-400"
+                          >
+                            <option value="public">Public</option>
+                            <option value="internal">Internal</option>
+                            <option value="confidential">Confidential</option>
+                            <option value="restricted">Restricted</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-medium text-black/60 dark:text-white/60">
+                            Allowed roles (comma-separated)
+                          </label>
+                          <input
+                            value={editRoles}
+                            onChange={(e) => setEditRoles(e.target.value)}
+                            placeholder="analyst, admin"
+                            className="w-full rounded border border-black/15 bg-transparent px-2 py-1 text-xs outline-none focus:border-blue-500 dark:border-white/20 dark:focus:border-blue-400"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-black/40 dark:text-white/40">
+                        Saving cascades the new roles to every chunk, so RLS reflects the change immediately.
                       </p>
-                      {doc.classification_reason && (
-                        <p className="mt-1 text-xs text-black/40 dark:text-white/40">
-                          Reason: {doc.classification_reason}
-                        </p>
-                      )}
+                      {editError && <p className="text-xs text-red-500">{editError}</p>}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => saveEdit(doc.id)}
+                          disabled={savingEdit}
+                          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+                        >
+                          {savingEdit ? "Saving..." : "Save"}
+                        </button>
+                        <button
+                          onClick={() => { setEditingId(null); setEditError(null); }}
+                          disabled={savingEdit}
+                          className="rounded-lg border border-black/15 px-3 py-1.5 text-xs font-medium text-black/60 hover:bg-black/5 disabled:opacity-40 dark:border-white/20 dark:text-white/60 dark:hover:bg-white/5"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${sensitivityColors[doc.sensitivity] || "bg-gray-100 text-gray-700"}`}>
-                      {doc.sensitivity}
-                    </span>
-                  </div>
+                  ) : (
+                    <div className="flex items-start justify-between gap-4">
+                      <button
+                        className="min-w-0 flex-1 text-left transition-opacity hover:opacity-70"
+                        onClick={() => setSelectedDoc(doc)}
+                      >
+                        <p className="font-medium text-sm">{doc.title || doc.source_id}</p>
+                        <p className="mt-1 text-xs text-black/50 dark:text-white/50">
+                          {doc.n_pages} pages • Uploaded {new Date(doc.created_at).toLocaleDateString()}
+                          <span className="ml-2 text-blue-500 dark:text-blue-400">Click to preview</span>
+                        </p>
+                        {doc.classification_reason && (
+                          <p className="mt-1 text-xs text-black/40 dark:text-white/40">
+                            Reason: {doc.classification_reason}
+                          </p>
+                        )}
+                      </button>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${sensitivityColors[doc.sensitivity] || "bg-gray-100 text-gray-700"}`}>
+                          {doc.sensitivity}
+                        </span>
+                        <button
+                          onClick={() => startEdit(doc)}
+                          className="text-xs text-blue-600 hover:underline dark:text-blue-400"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))
             )}
           </div>
         </div>
       </div>
+
+      {selectedDoc && (
+        <DocumentPreviewModal
+          docId={selectedDoc.id}
+          title={selectedDoc.title || selectedDoc.source_id}
+          sensitivity={selectedDoc.sensitivity}
+          onClose={() => setSelectedDoc(null)}
+        />
+      )}
     </Sidebar>
   );
 }

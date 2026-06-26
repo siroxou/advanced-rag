@@ -55,6 +55,14 @@ export type DocumentInfo = {
   created_at: string;
 };
 
+export type DocumentChunk = {
+  id: string;
+  page: number;
+  chunk_index: number;
+  content: string;
+  citation_anchor: string;
+};
+
 export type AuditEntry = {
   id: string;
   ts: string;
@@ -356,6 +364,104 @@ export async function getAuditLog(
     }
   );
   if (!res.ok) throw new Error(`Get audit log failed (${res.status})`);
+  return res.json();
+}
+
+// ── Documents (mutation) ───────────────────────────────────────────────────────
+
+export async function updateDocument(
+  docId: string,
+  sensitivity: string,
+  roles: string[]
+): Promise<DocumentInfo> {
+  const res = await fetch(`${API_BASE}/api/documents/${docId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sensitivity, allowed_roles: roles }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Update failed (${res.status}): ${err}`);
+  }
+  return res.json();
+}
+
+// ── Settings ───────────────────────────────────────────────────────────────────
+
+export type RuntimeSettings = {
+  llm: {
+    provider: string;
+    model: string;
+    base_url: string;
+    enable_thinking: boolean;
+    openrouter_user_key_set: boolean;
+    using_demo_key: boolean;
+  };
+  gen: { temperature: number; max_tokens: number };
+  guardrails: {
+    enabled: boolean;
+    injection: boolean;
+    grounding: boolean;
+    pii_detect: boolean;
+    safety: boolean;
+    pii_mask: boolean;
+    safety_model: string;
+  };
+  ratelimit: { enabled: boolean; per_minute: number };
+};
+
+export type SettingsPatch = Partial<{
+  provider: string;
+  model: string;
+  base_url: string;
+  enable_thinking: boolean;
+  openrouter_api_key: string;
+  temperature: number;
+  max_tokens: number;
+  guardrails_enabled: boolean;
+  injection: boolean;
+  grounding: boolean;
+  pii_detect: boolean;
+  safety: boolean;
+  pii_mask: boolean;
+  safety_model: string;
+  ratelimit_enabled: boolean;
+  ratelimit_per_minute: number;
+}>;
+
+export async function getSettings(): Promise<RuntimeSettings> {
+  const res = await fetch(`${API_BASE}/api/settings`);
+  if (!res.ok) throw new Error(`Get settings failed (${res.status})`);
+  return res.json();
+}
+
+export async function updateSettings(patch: SettingsPatch): Promise<RuntimeSettings> {
+  const res = await fetch(`${API_BASE}/api/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Update settings failed (${res.status}): ${err}`);
+  }
+  return res.json();
+}
+
+export async function listModels(): Promise<{ models: string[]; source: string }> {
+  const res = await fetch(`${API_BASE}/api/settings/models`);
+  if (!res.ok) throw new Error(`List models failed (${res.status})`);
+  return res.json();
+}
+
+export async function testLlm(): Promise<{
+  ok: boolean;
+  provider: string;
+  model: string;
+  detail: string;
+}> {
+  const res = await fetch(`${API_BASE}/api/settings/test-llm`, { method: "POST" });
+  if (!res.ok) throw new Error(`Test failed (${res.status})`);
   return res.json();
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import Sidebar from "@/components/Sidebar";
 import { API_BASE, type AuditEntry } from "@/lib/api";
@@ -11,11 +11,7 @@ export default function SecurityPage() {
   const [page, setPage] = useState(0);
   const LIMIT = 20;
 
-  useEffect(() => {
-    fetchAudit();
-  }, [page]);
-
-  async function fetchAudit() {
+  const fetchAudit = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/audit?limit=${LIMIT}&offset=${page * LIMIT}`);
       if (res.ok) {
@@ -25,20 +21,18 @@ export default function SecurityPage() {
     } catch (e) {
       console.error("Failed to fetch audit logs:", e);
     }
-  }
+  }, [page]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async on-mount fetch; state lands post-await
+    fetchAudit();
+  }, [fetchAudit]);
 
   const filteredLogs = filterRole === "all"
     ? auditLogs
     : auditLogs.filter(log => log.roles.includes(filterRole));
 
   const allRoles = Array.from(new Set(auditLogs.flatMap(l => l.roles)));
-
-  const sensitivityIcons: Record<string, string> = {
-    public: "🟢",
-    internal: "🔵",
-    confidential: "🟡",
-    restricted: "🔴",
-  };
 
   return (
     <Sidebar>
@@ -59,7 +53,7 @@ export default function SecurityPage() {
             <p className="mt-1 text-2xl font-bold">
               {auditLogs.length > 0
                 ? `${Math.round(auditLogs.reduce((sum, l) => sum + l.latency_ms, 0) / auditLogs.length)}ms`
-                : "—"}
+                : "n/a"}
             </p>
           </div>
           <div className="rounded-xl border border-black/10 bg-white p-4 dark:border-white/10 dark:bg-black">

@@ -10,6 +10,7 @@ const NAV = [
   { label: "Presets", href: "/presets", icon: "📚" },
   { label: "Admin", href: "/admin", icon: "👥" },
   { label: "Security", href: "/security", icon: "🔒" },
+  { label: "Settings", href: "/settings", icon: "⚙️" },
 ];
 
 export default function Sidebar({ children }: { children: ReactNode }) {

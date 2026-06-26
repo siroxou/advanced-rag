@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 import Sidebar from "@/components/Sidebar";
 import { API_BASE } from "@/lib/api";
@@ -36,23 +36,24 @@ export default function PresetsPage() {
   const [customRoles, setCustomRoles] = useState<Record<string, string>>({});
   const [classify, setClassify] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    fetchPresets();
-  }, []);
-
-  async function fetchPresets() {
+  const fetchPresets = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/presets`);
       if (res.ok) {
         const data = await res.json();
         setPresets(data);
       }
-    } catch (e) {
+    } catch {
       setError("Failed to fetch presets");
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async on-mount fetch; state lands post-await
+    fetchPresets();
+  }, [fetchPresets]);
 
   async function handleIngest(name: string) {
     setIngesting(name);
