@@ -164,6 +164,26 @@ output is checked so every inline `[n]` citation maps to a real source and scann
 verdicts surfaced in the UI. Heavy options (ShieldGemma, Presidio, a trained classifier) are
 drop-in points, not dependencies. See [ADR-0008](docs/adr/0008-layered-guardrails.md).
 
+**Reconfigure it live (operator Settings).** A `/settings` page (and `/api/settings`)
+changes the running system with no restart, backed by a small `app_settings` table that
+overlays the env defaults and hot-reloads on save:
+
+- **Swap models / bring your own key.** The hosted demo routes through **OpenRouter** (one
+  OpenAI-compatible gateway fronting Anthropic, OpenAI, Google and more), so any model is a
+  string away - the dropdown is populated live, with a "Test connection" probe. The shared
+  demo key is rate limited; paste your own OpenRouter key to lift the cap. Keys are never
+  returned by the API (only `using_demo_key` / `*_key_set` booleans).
+- **Toggle the guardrails.** Injection blocking, citation grounding, PII detection, and the
+  safety classifier each flip independently under a master switch; **PII masking** redacts
+  emails / SSNs / cards in the answer (`[REDACTED_*]`) instead of only flagging them.
+- **Rate limiting.** A per-IP sliding window protects the shared demo key and is skipped
+  automatically for local providers and bring-your-own keys.
+
+**Re-tier a document in place.** Editing a document's sensitivity from the Documents page
+cascades the new `allowed_roles` to every one of its chunks, so RLS reflects the change on
+the next query (a `viewer` immediately stops retrieving a now-restricted doc). See
+[ADR-0009](docs/adr/0009-runtime-settings-and-provider-gateway.md).
+
 ## Repository layout
 
 ```
@@ -187,7 +207,7 @@ docs/       architecture · ADRs · threat model · runbook
 ## Documentation
 
 - [Architecture](docs/architecture.md) · [Threat model](docs/threat-model.md) · [Runbook](docs/runbook.md)
-- ADRs: [local Gemma on Apple Silicon](docs/adr/0002-local-gemma-on-apple-silicon.md) · [pgvector + RLS for RBAC](docs/adr/0003-pgvector-rls-for-rbac.md) · [IaC as artifact](docs/adr/0004-iac-as-artifact.md) · [hybrid retrieval](docs/adr/0005-hybrid-retrieval.md) · [RLS enforcement](docs/adr/0006-rls-enforcement.md) · [agentic orchestration](docs/adr/0007-agentic-orchestration.md) · [layered guardrails](docs/adr/0008-layered-guardrails.md)
+- ADRs: [local Gemma on Apple Silicon](docs/adr/0002-local-gemma-on-apple-silicon.md) · [pgvector + RLS for RBAC](docs/adr/0003-pgvector-rls-for-rbac.md) · [IaC as artifact](docs/adr/0004-iac-as-artifact.md) · [hybrid retrieval](docs/adr/0005-hybrid-retrieval.md) · [RLS enforcement](docs/adr/0006-rls-enforcement.md) · [agentic orchestration](docs/adr/0007-agentic-orchestration.md) · [layered guardrails](docs/adr/0008-layered-guardrails.md) · [runtime settings + provider gateway](docs/adr/0009-runtime-settings-and-provider-gateway.md)
 
 ## License
 
