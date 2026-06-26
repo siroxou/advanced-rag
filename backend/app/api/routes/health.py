@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.core.config import settings
 from app.core.db import db_reachable
+from app.core.runtime_settings import runtime
 from app.llm.factory import get_llm
 
 router = APIRouter()
@@ -28,8 +29,8 @@ async def health() -> HealthResponse:
     return HealthResponse(
         status="ok",
         environment=settings.environment,
-        llm_provider=settings.llm_provider,
-        llm_model=settings.llm_model,
+        llm_provider=runtime.get_llm_provider(),
+        llm_model=runtime.get_llm_model(),
         llm_reachable=llm_ok,
         db_reachable=db_ok,
     )

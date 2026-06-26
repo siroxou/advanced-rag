@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     # Gemma 4 is a reasoning model. Off by default so the answer path is fast and
     # always returns final `content` (not chain-of-thought). Agents can opt in.
     llm_enable_thinking: bool = False
+    # Shared OpenRouter key for the hosted demo (one OpenAI-compatible gateway that
+    # routes to OpenAI / Anthropic / Google / many models). Empty locally; the real
+    # key lives only in the gitignored .env. Users can override with their own key
+    # from the Settings page, which also lifts the demo rate limit.
+    openrouter_api_key: str = ""
+    # Default generation params, used when a request omits them. Runtime-overridable.
+    gen_temperature: float = 0.2
+    gen_max_tokens: int = 1024
 
     # --- Embeddings / retrieval (Phase 1) ---------------------------------------
     embedding_model: str = "BAAI/bge-m3"
@@ -51,16 +59,39 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-insecure-change-me"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 720  # 12h dev sessions
+    # Portfolio demo runs without a login wall: requests with no/invalid JWT fall
+    # back to a demo identity carrying ``demo_roles``. The RLS machinery is
+    # unchanged - these roles still flow into the Postgres policy. Set
+    # ``auth_required=true`` to restore the hard JWT gate.
+    auth_required: bool = False
+    demo_username: str = "demo"
+    demo_roles: str = "viewer,analyst,admin"
 
     # --- Web search (Phase 3) ----------------------------------------------------
     tavily_api_key: str = ""
 
     # --- Guardrails (Phase 4) ----------------------------------------------------
+    # Master kill switch. Per-guardrail toggles below are AND-ed with this, and all
+    # are runtime-overridable from the Settings page.
     guardrails_enabled: bool = True
+    guardrails_injection: bool = True
+    guardrails_grounding: bool = True
+    guardrails_pii_detect: bool = True
+    guardrails_safety: bool = True
+    # Mask detected PII (emails, SSNs, cards) in the answer instead of only flagging
+    # it. Off by default so answers stay verbatim unless an operator opts in.
+    guardrails_pii_mask: bool = False
     # Optional ShieldGemma-style safety model served via the same OpenAI-compatible
     # endpoint. Empty = safety classification skipped (injection + grounding + PII
     # still run, with no extra latency).
     guardrails_safety_model: str = ""
+
+    # --- Rate limiting -----------------------------------------------------------
+    # Protects the shared demo OpenRouter key. Only enforced when a request would
+    # actually spend the demo key (skipped for local providers and BYO keys), so
+    # local development is never throttled. Runtime-overridable.
+    ratelimit_enabled: bool = True
+    ratelimit_per_minute: int = 1
 
     # --- Observability (Phase 6) -------------------------------------------------
     langfuse_public_key: str = ""
@@ -77,6 +108,10 @@ class Settings(BaseSettings):
     @property
     def default_role_list(self) -> list[str]:
         return [r.strip() for r in self.default_roles.split(",") if r.strip()]
+
+    @property
+    def demo_role_list(self) -> list[str]:
+        return [r.strip() for r in self.demo_roles.split(",") if r.strip()]
 
 
 @lru_cache

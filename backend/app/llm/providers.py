@@ -38,11 +38,14 @@ class OpenAICompatibleProvider:
         api_key: str = "not-needed",
         timeout: float = 120.0,
         enable_thinking: bool = False,
+        default_headers: dict[str, str] | None = None,
     ) -> None:
         self.name = name
         self.model = model
         self.enable_thinking = enable_thinking
-        self._client = AsyncOpenAI(base_url=base_url, api_key=api_key, timeout=timeout)
+        self._client = AsyncOpenAI(
+            base_url=base_url, api_key=api_key, timeout=timeout, default_headers=default_headers
+        )
 
     @staticmethod
     def _wire(messages: Sequence[ChatMessage]) -> list[ChatCompletionMessageParam]:
