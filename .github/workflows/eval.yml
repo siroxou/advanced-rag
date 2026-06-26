@@ -42,8 +42,10 @@ jobs:
       run:
         working-directory: backend
     steps:
+      - uses: actions/checkout@v4
       - name: Check for a model endpoint
         id: gate
+        working-directory: ${{ github.workspace }}
         run: |
           if [ -z "$LLM_API_KEY" ]; then
             echo "::notice::EVAL_LLM_API_KEY not set; skipping the eval gate. Add it (an OpenRouter key works) to enable."
@@ -51,8 +53,6 @@ jobs:
           else
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           fi
-      - if: steps.gate.outputs.enabled == 'true'
-        uses: actions/checkout@v4
       - if: steps.gate.outputs.enabled == 'true'
         uses: astral-sh/setup-uv@v5
         with:
