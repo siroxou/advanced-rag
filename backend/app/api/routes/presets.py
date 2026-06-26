@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_session
@@ -19,6 +20,19 @@ from app.llm.factory import get_llm
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+
+class PresetIngestRequest(BaseModel):
+    """Ingest options sent by the UI as a JSON body.
+
+    ``limit < 0`` means "use the preset's own default"; empty ``sensitivity`` /
+    ``roles`` mean "inherit the preset's tier".
+    """
+
+    limit: int = -1
+    sensitivity: str = ""
+    roles: str = ""
+    classify: bool = False
 
 
 @router.get("/presets")
@@ -42,21 +56,23 @@ async def list_presets_endpoint() -> list[dict[str, Any]]:
 @router.post("/presets/{name}/ingest")
 async def ingest_preset(
     name: str,
-    limit: int = -1,
-    sensitivity: str = "",
-    roles: str = "",
-    classify: bool = False,
+    body: PresetIngestRequest | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Ingest a corpus preset by name."""
+    """Ingest a corpus preset by name. Options come from the JSON request body."""
+    opts = body or PresetIngestRequest()
     preset = get_preset(name)
 
-    preset_roles = [r.strip() for r in roles.split(",") if r.strip()] if roles else preset.roles
-    preset_sensitivity = sensitivity or preset.sensitivity
+    preset_roles = (
+        [r.strip() for r in opts.roles.split(",") if r.strip()] if opts.roles else preset.roles
+    )
+    preset_sensitivity = opts.sensitivity or preset.sensitivity
 
-    if limit < 0:
-        limit = preset.default_limit
+    # Negative sentinel from the UI means "use the preset's own default" (which may
+    # itself be None = ingest everything).
+    resolved_limit: int | None = preset.default_limit if opts.limit < 0 else opts.limit
 
+    classify = opts.classify
     llm = get_llm() if classify else None
 
     if preset.kind == "text":
@@ -67,7 +83,7 @@ async def ingest_preset(
             text_column=preset.text_column,
             allowed_roles=preset_roles,
             sensitivity=preset_sensitivity,
-            limit=limit,
+            limit=resolved_limit,
             record_prefix=preset.record_prefix,
             classify_each=classify,
             llm=llm,
@@ -80,7 +96,7 @@ async def ingest_preset(
             pdf_column=preset.pdf_column,
             allowed_roles=preset_roles,
             sensitivity=preset_sensitivity,
-            limit=limit,
+            limit=resolved_limit,
             classify_each=classify,
             llm=llm,
         )
