@@ -32,9 +32,7 @@ async def get_audit_log(
     if "admin" not in user.roles:
         query = query.where(AuditLog.username == user.username)
 
-    result = await session.execute(
-        query.offset(offset).limit(limit)
-    )
+    result = await session.execute(query.offset(offset).limit(limit))
     logs = result.scalars().all()
 
     return {

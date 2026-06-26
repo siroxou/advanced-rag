@@ -69,6 +69,7 @@ async def reclassify_document(
     await session.refresh(doc)
     return doc
 
+
 UPLOAD_DIR = Path(__file__).parents[3] / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
@@ -128,9 +129,7 @@ async def list_documents(
     user: CurrentUser = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
     """List all documents the user has access to."""
-    result = await session.execute(
-        select(Document).order_by(Document.created_at.desc())
-    )
+    result = await session.execute(select(Document).order_by(Document.created_at.desc()))
     docs = result.scalars().all()
     return [
         {
@@ -160,9 +159,7 @@ async def get_document_chunks(
         {"roles": ",".join(user.roles)},
     )
     result = await session.execute(
-        select(Chunk)
-        .where(Chunk.doc_id == doc_id)
-        .order_by(Chunk.page, Chunk.chunk_index)
+        select(Chunk).where(Chunk.doc_id == doc_id).order_by(Chunk.page, Chunk.chunk_index)
     )
     chunks = result.scalars().all()
     return [
@@ -216,9 +213,7 @@ async def delete_document(
     """Delete a document and all its chunks."""
     from sqlalchemy import delete as pg_delete
 
-    result = await session.execute(
-        select(Document).where(Document.id == doc_id)
-    )
+    result = await session.execute(select(Document).where(Document.id == doc_id))
     doc = result.scalar_one_or_none()
     if not doc:
         raise HTTPException(404, "Document not found")

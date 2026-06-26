@@ -49,9 +49,7 @@ async def create_user(
 ) -> dict[str, Any]:
     """Create a new user with specified roles."""
     # Check if user already exists
-    existing = await session.execute(
-        select(User).where(User.username == username)
-    )
+    existing = await session.execute(select(User).where(User.username == username))
     if existing.scalar_one_or_none():
         raise HTTPException(400, "Username already exists")
 
@@ -83,9 +81,7 @@ async def update_user_roles(
     admin: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Update a user's roles."""
-    result = await session.execute(
-        select(User).where(User.username == username)
-    )
+    result = await session.execute(select(User).where(User.username == username))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(404, "User not found")
@@ -111,9 +107,7 @@ async def toggle_user_active(
     admin: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Enable/disable a user account."""
-    result = await session.execute(
-        select(User).where(User.username == username)
-    )
+    result = await session.execute(select(User).where(User.username == username))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(404, "User not found")
