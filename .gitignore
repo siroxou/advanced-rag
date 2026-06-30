@@ -37,3 +37,6 @@ ml/datasets/*.jsonl
 
 # --- Logs ---
 *.log
+
+# --- Build artifacts ---
+dist/

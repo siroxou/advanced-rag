@@ -1,0 +1,14 @@
+#!/bin/zsh
+# .app launcher, two auto-detected modes:
+#   1. Sitting inside a checked-out repo (app at the repo root) -> run that clone.
+#   2. Installed from the DMG (e.g. /Applications) -> bootstrap: clone/pull a
+#      managed copy in ~/Advanced RAG, then run it.
+# Either way it opens Terminal so logs show and closing the window stops the stack.
+emulate -L zsh
+CONTENTS="${0:A:h:h}"          # <bundle>/Contents
+REPO="${0:A:h:h:h:h}"          # repo root, IF this app lives inside a repo
+if [ -f "$REPO/scripts/launch.command" ]; then
+  open -a Terminal "$REPO/scripts/launch.command"
+else
+  open -a Terminal "$CONTENTS/Resources/bootstrap.command"
+fi

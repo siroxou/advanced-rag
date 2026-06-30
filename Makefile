@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install api web up down lint fmt test pull-model check migrate corpus ingest classify ingest-auto hf-ingest presets preset seed dataset eval-lora
+.PHONY: help install api web up down lint fmt test pull-model check migrate corpus ingest classify ingest-auto hf-ingest presets preset seed dataset eval-lora dmg
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -63,6 +63,9 @@ api: ## Run the FastAPI backend → http://localhost:8000
 
 web: ## Run the Next.js frontend → http://localhost:3000
 	cd frontend && pnpm dev
+
+dmg: ## Build a downloadable installer → dist/Advanced RAG.dmg
+	./scripts/build-dmg.sh
 
 lint: ## Lint + type-check the backend
 	cd backend && uv run ruff check . && uv run mypy app
