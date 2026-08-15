@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 
 import Sidebar from "@/components/Sidebar";
 import { API_BASE } from "@/lib/api";
+import { SENSITIVITY_CLASSES } from "@/lib/sensitivity";
 
 type PresetInfo = {
   name: string;
@@ -95,13 +96,6 @@ export default function PresetsPage() {
     pdf: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
   };
 
-  const sensitivityColors: Record<string, string> = {
-    public: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    internal: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    confidential: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-    restricted: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-  };
-
   if (loading) {
     return (
       <Sidebar>
@@ -134,7 +128,7 @@ export default function PresetsPage() {
                     <span className={`rounded px-2 py-0.5 text-xs font-medium ${kindColors[preset.kind] || "bg-gray-100 text-gray-700"}`}>
                       {preset.kind.toUpperCase()}
                     </span>
-                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${sensitivityColors[preset.sensitivity] || "bg-gray-100 text-gray-700"}`}>
+                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${SENSITIVITY_CLASSES[preset.sensitivity] || "bg-gray-100 text-gray-700"}`}>
                       {preset.sensitivity}
                     </span>
                   </div>

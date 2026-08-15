@@ -46,8 +46,6 @@ class Settings(BaseSettings):
     retrieval_candidates: int = 40  # hybrid pool size fed to the reranker
     retrieval_top_k: int = 6  # chunks kept after rerank and sent to the LLM
     rrf_k: int = 60  # reciprocal-rank-fusion damping constant
-    # Roles a request carries until Phase 2 derives them from a verified JWT.
-    default_roles: str = "viewer"
 
     # --- Database (Phase 1+) -----------------------------------------------------
     # App boots even if the DB is down; /api/health reports reachability.
@@ -108,10 +106,6 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
-
-    @property
-    def default_role_list(self) -> list[str]:
-        return [r.strip() for r in self.default_roles.split(",") if r.strip()]
 
     @property
     def demo_role_list(self) -> list[str]:

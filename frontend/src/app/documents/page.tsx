@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import DocumentPreviewModal from "@/components/DocumentPreviewModal";
 import Sidebar from "@/components/Sidebar";
 import { API_BASE, demoHeaders, updateDocument, type DocumentInfo } from "@/lib/api";
+import { sensitivityClass } from "@/lib/sensitivity";
 
 // Default role set per tier, mirroring the backend auto-classifier. Selecting a
 // sensitivity prefills these; the operator can still override.
@@ -209,13 +210,6 @@ export default function DocumentsPage() {
     ? documents
     : documents.filter(d => d.sensitivity === filterSensitivity);
 
-  const sensitivityColors: Record<string, string> = {
-    public: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    internal: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    confidential: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-    restricted: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-  };
-
   return (
     <Sidebar>
       <div className="mx-auto max-w-5xl px-6 py-8">
@@ -369,12 +363,7 @@ export default function DocumentsPage() {
                       }`}>
                         {preset.kind}
                       </span>
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ${
-                        preset.sensitivity === "public" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
-                        preset.sensitivity === "internal" ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" :
-                        preset.sensitivity === "confidential" ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" :
-                        "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                      }`}>
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase ${sensitivityClass(preset.sensitivity)}`}>
                         {preset.sensitivity}
                       </span>
                     </div>
@@ -565,7 +554,7 @@ export default function DocumentsPage() {
                         )}
                       </button>
                       <div className="flex shrink-0 items-center gap-2">
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${sensitivityColors[doc.sensitivity] || "bg-gray-100 text-gray-700"}`}>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${sensitivityClass(doc.sensitivity)}`}>
                           {doc.sensitivity}
                         </span>
                         <button
