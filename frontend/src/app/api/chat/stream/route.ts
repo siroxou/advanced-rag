@@ -13,7 +13,7 @@ import {
 import { streamChat } from "@/lib/demo/openrouter";
 import { buildMessages, NO_CONTEXT_MSG } from "@/lib/demo/prompt";
 import { retrieve } from "@/lib/demo/retrieval";
-import { getOverrides, getRoles, getSettings, resolvedKey } from "@/lib/demo/state";
+import { getOverrides, getRoles, getSettings, needsKey, resolvedKey } from "@/lib/demo/state";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +45,7 @@ export async function POST(req: Request) {
   const settings = getSettings(req);
   const overrides = getOverrides(req);
   const key = resolvedKey(req);
+  const missingKey = needsKey(req);
   const g = settings.guardrails;
 
   const encoder = new TextEncoder();
@@ -95,6 +96,20 @@ export async function POST(req: Request) {
         }
 
         // --- Synthesis (real streaming) ---
+        // Everything above this line - routing, RBAC-filtered retrieval, citations -
+        // runs without a key, so the access-control demo works before you add one.
+        if (missingKey) {
+          send({
+            delta:
+              "I retrieved the sources above, but I need a model to write the answer.\n\n" +
+              "Open **Settings**, pick a provider, and paste your own API key. " +
+              "Nothing is shared: the key stays in your browser and is only used for your requests.",
+          });
+          send({ guardrails: { grounding_ok: true, invalid_citations: [], pii_found: [] } });
+          done();
+          return;
+        }
+
         const msgs = buildMessages(query, retrieved, history);
         let answer = "";
         for await (const delta of streamChat({
@@ -131,7 +146,7 @@ export async function POST(req: Request) {
         done();
       } catch (e) {
         const msg = e instanceof Error ? e.message : "model unavailable";
-        send({ delta: `\n\n_The demo model is unavailable: ${msg}. Set OPENROUTER_API_KEY to enable live answers._` });
+        send({ delta: `\n\n_The model could not be reached: ${msg}. Check your provider, model id, and API key in Settings._` });
         done();
       }
     },

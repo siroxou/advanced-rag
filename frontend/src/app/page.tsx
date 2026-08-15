@@ -89,6 +89,14 @@ export default function Home() {
           Tip: ask the first one as a <span className="font-medium">Viewer</span> (you&apos;ll be refused),
           then switch to <span className="font-medium">Admin</span> in the sidebar and ask again.
         </p>
+        <p className="mt-2 text-center text-xs text-black/40 dark:text-white/40">
+          Retrieval and access control run without any setup. To have a model write the
+          answers, add your own API key in{" "}
+          <Link href="/settings" className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">
+            Settings
+          </Link>{" "}
+          - OpenAI, Anthropic, Google, Groq, OpenRouter and more. It stays in your browser.
+        </p>
       </section>
 
       {/* Features */}

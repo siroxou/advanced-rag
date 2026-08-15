@@ -28,9 +28,22 @@ logger = get_logger(__name__)
 # many providers. Used as the base_url whenever the provider is "openrouter".
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
+# Every one of these speaks the OpenAI chat-completions wire format, which is why a
+# single client covers them all: only the base URL, key, and model id change.
+# Anthropic and Google are reached through their OpenAI-compatible endpoints rather
+# than their native APIs for exactly that reason. Kept in step with
+# frontend/src/lib/demo/providers.ts.
 _PROVIDER_BASE_URLS = {
     "openrouter": OPENROUTER_BASE_URL,
     "openai": "https://api.openai.com/v1",
+    "anthropic": "https://api.anthropic.com/v1",
+    "google": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "groq": "https://api.groq.com/openai/v1",
+    "mistral": "https://api.mistral.ai/v1",
+    "deepseek": "https://api.deepseek.com/v1",
+    "xai": "https://api.x.ai/v1",
+    "together": "https://api.together.xyz/v1",
+    "ollama": "http://localhost:11434/v1",
 }
 
 

@@ -104,6 +104,8 @@ export type RuntimeSettings = {
     enable_thinking: boolean;
     openrouter_user_key_set: boolean;
     using_demo_key: boolean;
+    /** True when this provider needs a key and none is stored yet. */
+    needs_key?: boolean;
   };
   gen: { temperature: number; max_tokens: number };
   guardrails: {
@@ -123,6 +125,8 @@ export type SettingsPatch = Partial<{
   model: string;
   base_url: string;
   enable_thinking: boolean;
+  /** Provider-neutral key field; openrouter_api_key stays accepted for compatibility. */
+  api_key: string;
   openrouter_api_key: string;
   temperature: number;
   max_tokens: number;

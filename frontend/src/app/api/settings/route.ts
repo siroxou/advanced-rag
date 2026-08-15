@@ -2,6 +2,7 @@
  * is stored in an httpOnly cookie and never returned - the snapshot exposes only
  * whether a user key is set and whether the shared demo key is in use. */
 
+import { getProvider } from "@/lib/demo/providers";
 import { cookie, COOKIE, getSettings, snapshot, type DemoSettings } from "@/lib/demo/state";
 
 export const runtime = "nodejs";
@@ -17,6 +18,7 @@ type Patch = Partial<{
   base_url: string;
   enable_thinking: boolean;
   openrouter_api_key: string;
+  api_key: string;
   temperature: number;
   max_tokens: number;
   guardrails_enabled: boolean;
@@ -34,11 +36,17 @@ export async function PUT(req: Request) {
   const p = (await req.json().catch(() => ({}))) as Patch;
   const cur = getSettings(req);
 
+  // Switching provider carries its own base URL and default model, unless the
+  // request names them explicitly. Without this you would pick "Groq" and still
+  // be pointed at the previous provider's endpoint.
+  const switched = p.provider !== undefined && p.provider !== cur.llm.provider;
+  const preset = switched ? getProvider(p.provider as string) : undefined;
+
   const next: DemoSettings = {
     llm: {
       provider: p.provider ?? cur.llm.provider,
-      model: p.model ?? cur.llm.model,
-      base_url: p.base_url ?? cur.llm.base_url,
+      model: p.model ?? preset?.defaultModel ?? cur.llm.model,
+      base_url: p.base_url ?? preset?.baseUrl ?? cur.llm.base_url,
       enable_thinking: p.enable_thinking ?? cur.llm.enable_thinking,
     },
     gen: {
@@ -60,18 +68,22 @@ export async function PUT(req: Request) {
     },
   };
 
+  // `api_key` is the provider-neutral name; `openrouter_api_key` is kept working
+  // so an older client keeps saving successfully.
+  const key = p.api_key ?? p.openrouter_api_key;
+
   const headers = new Headers();
   headers.append("Set-Cookie", cookie(COOKIE.settings, JSON.stringify(next)));
-  // BYO key: an empty string clears it (revert to the shared demo key).
-  if (p.openrouter_api_key !== undefined) {
-    headers.append("Set-Cookie", cookie(COOKIE.key, p.openrouter_api_key, { httpOnly: true }));
+  // An empty string clears the stored key.
+  if (key !== undefined) {
+    headers.append("Set-Cookie", cookie(COOKIE.key, key, { httpOnly: true }));
   }
 
   // Return a snapshot reflecting the just-applied changes (no round-trip needed).
   const parts = [req.headers.get("cookie") ?? ""];
   parts.push(`${COOKIE.settings}=${encodeURIComponent(JSON.stringify(next))}`);
-  if (p.openrouter_api_key !== undefined) {
-    parts.push(`${COOKIE.key}=${encodeURIComponent(p.openrouter_api_key)}`);
+  if (key !== undefined) {
+    parts.push(`${COOKIE.key}=${encodeURIComponent(key)}`);
   }
   const merged = new Request(req.url, { headers: { cookie: parts.filter(Boolean).join("; ") } });
 

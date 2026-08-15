@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import Sidebar from "@/components/Sidebar";
 import Toggle from "@/components/Toggle";
+import { PROVIDERS, getProvider } from "@/lib/demo/providers";
 import {
   getSettings,
   listModels,
@@ -125,6 +126,9 @@ export default function SettingsPage() {
   }
 
   const { llm, gen, guardrails, ratelimit } = settings;
+  const provider = getProvider(llm.provider);
+  const keySet = llm.openrouter_user_key_set;
+  const needsKey = llm.needs_key ?? (!!provider?.needsKey && !keySet);
 
   return (
     <Sidebar>
@@ -160,7 +164,8 @@ export default function SettingsPage() {
         <section className="mt-6 rounded-xl border border-black/10 bg-white p-6 dark:border-white/10 dark:bg-black">
           <h2 className="text-lg font-semibold">Model &amp; Provider</h2>
           <p className="mt-1 text-sm text-black/50 dark:text-white/50">
-            OpenRouter fronts OpenAI, Anthropic, Google and more through one gateway.
+            Bring your own key from any provider below. They all speak the OpenAI
+            chat-completions format, so switching is a base URL and a model id.
           </p>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -170,13 +175,27 @@ export default function SettingsPage() {
               </label>
               <select
                 value={llm.provider}
-                onChange={(e) => patch((s) => ({ ...s, llm: { ...s.llm, provider: e.target.value } }))}
+                onChange={(e) => {
+                  // Carry the provider's own endpoint and default model across, so
+                  // switching never leaves you pointed at the previous one.
+                  const next = getProvider(e.target.value);
+                  patch((s) => ({
+                    ...s,
+                    llm: {
+                      ...s.llm,
+                      provider: e.target.value,
+                      base_url: next?.baseUrl ?? s.llm.base_url,
+                      model: next?.defaultModel ?? s.llm.model,
+                    },
+                  }));
+                }}
                 className={INPUT}
               >
-                <option value="openrouter">OpenRouter</option>
-                <option value="openai">OpenAI</option>
-                <option value="ollama">Ollama (local)</option>
-                <option value="custom">Custom endpoint</option>
+                {PROVIDERS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
@@ -191,7 +210,7 @@ export default function SettingsPage() {
                 className={INPUT}
               />
               <datalist id="model-options">
-                {models.map((m) => (
+                {(models.length ? models : (provider?.models ?? [])).map((m) => (
                   <option key={m} value={m} />
                 ))}
               </datalist>
@@ -209,34 +228,49 @@ export default function SettingsPage() {
             />
           </div>
 
-          {/* OpenRouter API key */}
+          {/* API key - the visitor's own, never shared */}
           <div className="mt-4 rounded-lg border border-black/10 p-4 dark:border-white/10">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Your OpenRouter API key</p>
+              <p className="text-sm font-medium">Your {provider?.label.split(" (")[0] ?? "provider"} API key</p>
               <span
                 className={`rounded px-2 py-0.5 text-[10px] font-medium uppercase ${
-                  llm.using_demo_key
+                  needsKey
                     ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                     : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                 }`}
               >
-                {llm.using_demo_key ? "Using shared demo key" : "Using your key"}
+                {needsKey ? "Key required" : keySet ? "Your key is set" : "No key needed"}
               </span>
             </div>
             <p className="mt-1 text-xs text-black/50 dark:text-white/50">
-              The shared demo key is rate limited to {ratelimit.per_minute}/min. Add your own to lift it.
+              This demo runs on your own key, so nobody else spends it. It is stored in an
+              httpOnly cookie in your browser, never sent anywhere but your chosen provider,
+              and never readable by the page.
+              {provider?.keyUrl ? (
+                <>
+                  {" "}
+                  <a
+                    href={provider.keyUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+                  >
+                    Get a {provider.label.split(" (")[0]} key →
+                  </a>
+                </>
+              ) : null}
             </p>
             <div className="mt-3 flex gap-2">
               <input
                 type="password"
                 value={apiKeyInput}
                 onChange={(e) => setApiKeyInput(e.target.value)}
-                placeholder="sk-or-..."
+                placeholder={provider?.keyPlaceholder ?? "your API key"}
                 className={INPUT}
               />
               <button
                 onClick={() => {
-                  apply({ openrouter_api_key: apiKeyInput }, "Key saved");
+                  apply({ api_key: apiKeyInput }, "Key saved");
                   setApiKeyInput("");
                 }}
                 disabled={saving || !apiKeyInput.trim()}
@@ -244,13 +278,13 @@ export default function SettingsPage() {
               >
                 Save key
               </button>
-              {llm.openrouter_user_key_set && (
+              {keySet && (
                 <button
-                  onClick={() => apply({ openrouter_api_key: "" }, "Reverted to demo key")}
+                  onClick={() => apply({ api_key: "" }, "Key removed")}
                   disabled={saving}
                   className="shrink-0 rounded-lg border border-black/15 px-3 py-2 text-sm font-medium text-black/60 hover:bg-black/5 disabled:opacity-40 dark:border-white/20 dark:text-white/60 dark:hover:bg-white/5"
                 >
-                  Use demo
+                  Remove
                 </button>
               )}
             </div>

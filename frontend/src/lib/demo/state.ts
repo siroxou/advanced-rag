@@ -1,16 +1,19 @@
 /**
  * Per-browser demo state, persisted in cookies so the self-contained demo behaves
  * statefully on serverless (no database). Roles drive the simulated RBAC; settings
- * carry the guardrail toggles and model choice; overrides hold in-place document
- * re-tiering. A bring-your-own OpenRouter key is kept in an httpOnly cookie so it
- * is never readable by client JS, and is used server-side in place of the shared
- * demo key.
+ * carry the guardrail toggles, provider, and model choice; overrides hold in-place
+ * document re-tiering.
+ *
+ * There is no shared API key. Each visitor supplies their own, held in an httpOnly
+ * cookie so client JS can never read it back, and used only server-side. That keeps
+ * the demo free to run and means one person's spend is never another's.
  */
 
+import { DEFAULT_PROVIDER, getProvider } from "./providers";
 import type { DocOverride } from "./retrieval";
 
-export const DEFAULT_MODEL = "anthropic/claude-haiku-4.5";
-export const OPENROUTER_BASE = "https://openrouter.ai/api/v1";
+export const DEFAULT_MODEL = DEFAULT_PROVIDER.defaultModel;
+export const OPENROUTER_BASE = DEFAULT_PROVIDER.baseUrl;
 export const ALL_ROLES = ["viewer", "analyst", "admin"];
 
 export const COOKIE = {
@@ -42,9 +45,9 @@ export type DemoSettings = {
 
 export const DEFAULT_SETTINGS: DemoSettings = {
   llm: {
-    provider: "openrouter",
-    model: DEFAULT_MODEL,
-    base_url: OPENROUTER_BASE,
+    provider: DEFAULT_PROVIDER.id,
+    model: DEFAULT_PROVIDER.defaultModel,
+    base_url: DEFAULT_PROVIDER.baseUrl,
     enable_thinking: false,
   },
   gen: { temperature: 0.2, max_tokens: 1024 },
@@ -111,12 +114,14 @@ export function getUserKey(req: Request): string {
   return parseCookies(req)[COOKIE.key] ?? "";
 }
 
-export function usingDemoKey(req: Request): boolean {
-  return !getUserKey(req) && !!process.env.OPENROUTER_API_KEY;
+/** True when the caller still has to supply a key before anything will answer. */
+export function needsKey(req: Request): boolean {
+  const provider = getProvider(getSettings(req).llm.provider);
+  return (provider?.needsKey ?? true) && !getUserKey(req);
 }
 
 export function resolvedKey(req: Request): string {
-  return getUserKey(req) || process.env.OPENROUTER_API_KEY || "";
+  return getUserKey(req);
 }
 
 /** Public snapshot for GET /api/settings - never includes the raw key. */
@@ -126,7 +131,8 @@ export function snapshot(req: Request): Record<string, unknown> {
     llm: {
       ...s.llm,
       openrouter_user_key_set: !!getUserKey(req),
-      using_demo_key: usingDemoKey(req),
+      using_demo_key: false,
+      needs_key: needsKey(req),
     },
     gen: s.gen,
     guardrails: s.guardrails,
