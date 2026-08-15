@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.api.routes.documents import reclassify_document
 from app.core.config import settings
 
+pytestmark = pytest.mark.integration
+
 _ZERO_VEC = "[" + ",".join(["0"] * settings.embedding_dim) + "]"
 
 

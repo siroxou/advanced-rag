@@ -64,6 +64,9 @@ extend-immutable-calls = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["."]
+# Tests needing a live Postgres. Excluded from the fast unit run with
+# `-m "not integration"`; CI runs them in a separate job with a pgvector service.
+markers = ["integration: needs a live Postgres"]
 
 [tool.mypy]
 python_version = "3.12"
