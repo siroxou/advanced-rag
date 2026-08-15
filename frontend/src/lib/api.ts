@@ -13,6 +13,13 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 /**
+ * True when the app is serving its own bundled corpus rather than talking to the
+ * FastAPI stack. Ingestion, uploads and user management need the real backend, so
+ * the UI says so up front instead of offering controls that can only fail.
+ */
+export const IS_HOSTED_DEMO = API_BASE === "";
+
+/**
  * Forward the role switcher's choice to the FastAPI backend.
  *
  * The Next.js demo handlers read the `demo_roles` cookie directly, but a request

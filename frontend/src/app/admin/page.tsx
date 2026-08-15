@@ -1,65 +1,71 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import Sidebar from "@/components/Sidebar";
-import { API_BASE, type AdminUser } from "@/lib/api";
+import AppShell from "@/components/AppShell";
+import PageHeader from "@/components/PageHeader";
+import { IconAlert, IconCheck, IconLock } from "@/components/icons";
+import { API_BASE, IS_HOSTED_DEMO, type AdminUser } from "@/lib/api";
 
-export default function AdminPage() {
+const ROLE_BADGE: Record<string, string> = {
+  admin: "badge-danger",
+  analyst: "badge-info",
+  viewer: "badge-ok",
+};
+
+const ROLE_REACH: Record<string, string> = {
+  admin: "Every tier, including restricted",
+  analyst: "Public and internal documents",
+  viewer: "Public documents only",
+};
+
+export default function PeoplePage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [newUsername, setNewUsername] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [newRoles, setNewRoles] = useState("viewer");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [roles, setRoles] = useState("viewer");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  async function fetchUsers() {
+  const fetchUsers = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/admin/users`);
-      if (res.ok) {
-        const data = await res.json();
-        setUsers(data);
-      }
+      if (res.ok) setUsers(await res.json());
     } catch (e) {
       console.error("Failed to fetch users:", e);
+    } finally {
+      setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async on-mount fetch; state lands post-await
+    fetchUsers();
+  }, [fetchUsers]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     setSuccess(null);
-
     try {
       const res = await fetch(`${API_BASE}/api/admin/users`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          username: newUsername,
-          password: newPassword,
-          roles: newRoles,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password, roles }),
       });
-
       if (res.ok) {
         const result = await res.json();
-        setSuccess(`User "${result.username}" created with roles: ${result.roles.join(", ")}`);
-        setNewUsername("");
-        setNewPassword("");
+        setSuccess(`Created ${result.username} with roles: ${result.roles.join(", ")}`);
+        setUsername("");
+        setPassword("");
         setShowCreate(false);
         fetchUsers();
       } else {
-        const err = await res.text();
-        setError(err || "Failed to create user");
+        setError((await res.text()) || "Failed to create user");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Network error");
@@ -68,141 +74,127 @@ export default function AdminPage() {
     }
   }
 
-  const roleColors: Record<string, string> = {
-    admin: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-    analyst: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    viewer: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400",
-  };
-
   return (
-    <Sidebar>
-      <div className="mx-auto max-w-5xl px-6 py-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Admin Panel</h1>
-            <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-              Manage users, roles, and access control.
-            </p>
-          </div>
-          <button
-            onClick={() => setShowCreate(!showCreate)}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-opacity hover:bg-blue-700"
-          >
-            {showCreate ? "Cancel" : "+ Add User"}
-          </button>
-        </div>
-
-        {/* Create User Form */}
-        {showCreate && (
-          <div className="mt-6 rounded-xl border border-black/10 bg-white p-6 dark:border-white/10 dark:bg-black">
-            <h2 className="text-lg font-semibold">Create New User</h2>
-            <form onSubmit={handleCreate} className="mt-4 flex flex-col gap-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-black/60 dark:text-white/60">
-                    Username
-                  </label>
-                  <input
-                    value={newUsername}
-                    onChange={(e) => setNewUsername(e.target.value)}
-                    placeholder="e.g., john_doe"
-                    required
-                    className="w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-blue-500 dark:border-white/20 dark:focus:border-blue-400"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-black/60 dark:text-white/60">
-                    Password
-                  </label>
-                  <input
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    type="password"
-                    placeholder="Set password"
-                    required
-                    className="w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-blue-500 dark:border-white/20 dark:focus:border-blue-400"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-black/60 dark:text-white/60">
-                  Roles
-                </label>
-                <select
-                  value={newRoles}
-                  onChange={(e) => setNewRoles(e.target.value)}
-                  className="w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-blue-500 dark:border-white/20 dark:focus:border-blue-400"
-                >
-                  <option value="viewer">Viewer (read-only)</option>
-                  <option value="analyst">Analyst (read + query)</option>
-                  <option value="admin">Admin (full access)</option>
-                </select>
-              </div>
-
+    <AppShell>
+      <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
+        <PageHeader
+          title="People"
+          subtitle="Accounts and the roles they carry. A role is the only thing that decides which documents retrieval will return."
+          actions={
+            !IS_HOSTED_DEMO && (
               <button
-                type="submit"
-                disabled={busy || !newUsername || !newPassword}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-opacity hover:bg-blue-700 disabled:opacity-40"
+                onClick={() => setShowCreate((s) => !s)}
+                aria-expanded={showCreate}
+                className={showCreate ? "btn btn-secondary" : "btn btn-primary"}
               >
-                {busy ? "Creating..." : "Create User"}
+                {showCreate ? "Cancel" : "Add person"}
               </button>
+            )
+          }
+        />
 
-              {error && (
-                <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-900/20 dark:text-red-400">
-                  {error}
-                </p>
-              )}
-              {success && (
-                <p className="rounded-lg bg-green-50 px-3 py-2 text-xs text-green-600 dark:bg-green-900/20 dark:text-green-400">
-                  {success}
-                </p>
-              )}
-            </form>
-          </div>
+        {IS_HOSTED_DEMO && (
+          <p className="mt-5 flex items-start gap-2 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm leading-relaxed text-muted">
+            <IconLock size={15} className="mt-0.5 shrink-0 text-faint" />
+            These three accounts are fixed in the hosted demo. Use the role switcher in the
+            sidebar to browse as any of them; creating accounts needs the auth backend from the
+            full stack.
+          </p>
         )}
 
-        {/* User List */}
-        <div className="mt-6 rounded-xl border border-black/10 bg-white dark:border-white/10 dark:bg-black">
-          <div className="border-b border-black/10 px-6 py-4 dark:border-white/10">
-            <h2 className="text-lg font-semibold">Users ({users.length})</h2>
-          </div>
+        {showCreate && (
+          <form onSubmit={handleCreate} className="card mt-5 flex flex-col gap-4 p-5">
+            <h2 className="font-semibold">New person</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label" htmlFor="new-username">
+                  Username
+                </label>
+                <input
+                  id="new-username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                  className="field"
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="new-password">
+                  Password
+                </label>
+                <input
+                  id="new-password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="field"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="label" htmlFor="new-roles">
+                Role
+              </label>
+              <select
+                id="new-roles"
+                value={roles}
+                onChange={(e) => setRoles(e.target.value)}
+                className="field"
+              >
+                <option value="viewer">Viewer - public documents only</option>
+                <option value="analyst">Analyst - public and internal</option>
+                <option value="admin">Admin - every tier</option>
+              </select>
+            </div>
+            <button
+              type="submit"
+              disabled={busy || !username || !password}
+              className="btn btn-primary self-start"
+            >
+              {busy ? "Creating..." : "Create"}
+            </button>
+          </form>
+        )}
 
-          <div className="divide-y divide-black/5 dark:divide-white/5">
-            {users.length === 0 ? (
-              <p className="px-6 py-8 text-center text-sm text-black/40 dark:text-white/40">
-                No users found. Create your first user above.
-              </p>
-            ) : (
-              users.map((u) => (
-                <div key={u.id} className="px-6 py-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                        {u.username.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm">{u.username}</p>
-                        <p className="text-xs text-black/40 dark:text-white/40">
-                          Created {new Date(u.created_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${roleColors[u.roles[0]] || "bg-gray-100 text-gray-700"}`}>
-                        {u.roles.join(", ")}
-                      </span>
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${u.is_active ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"}`}>
-                        {u.is_active ? "Active" : "Inactive"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+        {error && (
+          <p className="mt-4 flex items-start gap-2 rounded-xl border border-danger-line bg-danger-soft px-4 py-3 text-sm leading-relaxed text-danger">
+            <IconAlert size={15} className="mt-0.5 shrink-0" />
+            {error}
+          </p>
+        )}
+        {success && (
+          <p className="mt-4 flex items-start gap-2 rounded-xl border border-ok-line bg-ok-soft px-4 py-3 text-sm text-ok">
+            <IconCheck size={15} className="mt-0.5 shrink-0" />
+            {success}
+          </p>
+        )}
+
+        <div className="mt-6 flex flex-col gap-2">
+          {loading && <p className="py-10 text-center text-sm text-faint">Loading people...</p>}
+          {users.map((u) => (
+            <div key={u.id} className="card flex items-center gap-3 p-4">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-accent">
+                {u.username.charAt(0).toUpperCase()}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{u.username}</p>
+                <p className="text-xs text-faint">
+                  {ROLE_REACH[u.roles[0]] ?? "Custom role set"}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {u.roles.map((r) => (
+                  <span key={r} className={`badge ${ROLE_BADGE[r] ?? "badge-neutral"}`}>
+                    {r}
+                  </span>
+                ))}
+                {!u.is_active && <span className="badge badge-neutral">inactive</span>}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
-    </Sidebar>
+    </AppShell>
   );
 }

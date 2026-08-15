@@ -102,7 +102,7 @@ export async function POST(req: Request) {
           send({
             delta:
               "I retrieved the sources above, but I need a model to write the answer.\n\n" +
-              "Open **Settings**, pick a provider, and paste your own API key. " +
+              "Open Settings, pick a provider, and paste your own API key. " +
               "Nothing is shared: the key stays in your browser and is only used for your requests.",
           });
           send({ guardrails: { grounding_ok: true, invalid_citations: [], pii_found: [] } });

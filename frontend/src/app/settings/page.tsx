@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import Sidebar from "@/components/Sidebar";
+import AppShell from "@/components/AppShell";
+import PageHeader from "@/components/PageHeader";
 import Toggle from "@/components/Toggle";
+import { IconAlert, IconCheck, IconLock } from "@/components/icons";
 import { PROVIDERS, getProvider } from "@/lib/demo/providers";
 import {
   getSettings,
@@ -14,10 +16,25 @@ import {
   type SettingsPatch,
 } from "@/lib/api";
 
-const INPUT =
-  "w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none focus:border-blue-500 dark:border-white/20 dark:focus:border-blue-400";
-
 type TestResult = { ok: boolean; provider: string; model: string; detail: string };
+
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="card mt-5 p-5">
+      <h2 className="font-semibold">{title}</h2>
+      <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted">{description}</p>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<RuntimeSettings | null>(null);
@@ -31,8 +48,7 @@ export default function SettingsPage() {
 
   const load = useCallback(async () => {
     try {
-      const s = await getSettings();
-      setSettings(s);
+      setSettings(await getSettings());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load settings");
     }
@@ -64,8 +80,7 @@ export default function SettingsPage() {
     setSaving(true);
     setError(null);
     try {
-      const next = await updateSettings(p);
-      setSettings(next);
+      setSettings(await updateSettings(p));
       setSavedAt(note);
       setTimeout(() => setSavedAt(null), 2500);
     } catch (e) {
@@ -114,66 +129,113 @@ export default function SettingsPage() {
 
   if (!settings) {
     return (
-      <Sidebar>
-        <div className="mx-auto max-w-3xl px-6 py-8">
-          <h1 className="text-2xl font-bold">Settings</h1>
-          <p className="mt-4 text-sm text-black/50 dark:text-white/50">
-            {error ? `Error: ${error}` : "Loading..."}
-          </p>
+      <AppShell>
+        <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
+          <PageHeader title="Settings" subtitle="Model, key and guardrail controls." />
+          <p className="mt-6 text-sm text-faint">{error ? `Error: ${error}` : "Loading..."}</p>
         </div>
-      </Sidebar>
+      </AppShell>
     );
   }
 
   const { llm, gen, guardrails, ratelimit } = settings;
   const provider = getProvider(llm.provider);
+  const providerName = provider?.label.split(" (")[0] ?? "provider";
   const keySet = llm.openrouter_user_key_set;
   const needsKey = llm.needs_key ?? (!!provider?.needsKey && !keySet);
 
   return (
-    <Sidebar>
-      <div className="mx-auto max-w-3xl px-6 py-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Settings</h1>
-            <p className="mt-1 text-sm text-black/60 dark:text-white/60">
-              Switch models, bring your own key, and tune guardrails. Changes apply live.
-            </p>
-          </div>
-          <button
-            onClick={saveAll}
-            disabled={saving}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40"
-          >
-            {saving ? "Saving..." : "Save changes"}
-          </button>
-        </div>
+    <AppShell>
+      <div className="mx-auto max-w-3xl px-5 py-8 sm:px-8">
+        <PageHeader
+          title="Settings"
+          subtitle="Switch the model behind the assistant, bring your own key, and tune the guardrails. Changes apply to the next question, with no redeploy."
+          actions={
+            <button onClick={saveAll} disabled={saving} className="btn btn-primary">
+              {saving ? "Saving..." : "Save changes"}
+            </button>
+          }
+        />
 
         {savedAt && (
-          <div className="mt-4 rounded-lg bg-green-50 px-4 py-2 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-400">
-            ✓ {savedAt}
-          </div>
+          <p className="mt-4 flex items-center gap-2 rounded-xl border border-ok-line bg-ok-soft px-4 py-2.5 text-sm text-ok">
+            <IconCheck size={15} /> {savedAt}
+          </p>
         )}
         {error && (
-          <div className="mt-4 rounded-lg bg-red-50 px-4 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
-            {error}
-          </div>
+          <p className="mt-4 flex items-start gap-2 rounded-xl border border-danger-line bg-danger-soft px-4 py-2.5 text-sm text-danger">
+            <IconAlert size={15} className="mt-0.5 shrink-0" /> {error}
+          </p>
         )}
 
-        {/* Model & Provider */}
-        <section className="mt-6 rounded-xl border border-black/10 bg-white p-6 dark:border-white/10 dark:bg-black">
-          <h2 className="text-lg font-semibold">Model &amp; Provider</h2>
-          <p className="mt-1 text-sm text-black/50 dark:text-white/50">
-            Bring your own key from any provider below. They all speak the OpenAI
-            chat-completions format, so switching is a base URL and a model id.
-          </p>
+        {/* Key first: nothing else here matters until the assistant can reach a model. */}
+        <Section
+          title="Your API key"
+          description={`The assistant runs on your own key, so nobody else spends it. It is stored in an httpOnly cookie in your browser, never readable by this page, and sent only to ${providerName}.`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="flex items-center gap-2 text-sm font-medium">
+              <IconLock size={15} className="text-faint" />
+              {providerName}
+            </span>
+            <span className={`badge ${needsKey ? "badge-warn" : keySet ? "badge-ok" : "badge-neutral"}`}>
+              {needsKey ? "Key required" : keySet ? "Key set" : "No key needed"}
+            </span>
+          </div>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="mt-3 flex flex-wrap gap-2">
+            <input
+              type="password"
+              value={apiKeyInput}
+              onChange={(e) => setApiKeyInput(e.target.value)}
+              placeholder={provider?.keyPlaceholder ?? "your API key"}
+              aria-label={`${providerName} API key`}
+              className="field min-w-56 flex-1"
+            />
+            <button
+              onClick={() => {
+                apply({ api_key: apiKeyInput }, "Key saved");
+                setApiKeyInput("");
+              }}
+              disabled={saving || !apiKeyInput.trim()}
+              className="btn btn-primary"
+            >
+              Save key
+            </button>
+            {keySet && (
+              <button
+                onClick={() => apply({ api_key: "" }, "Key removed")}
+                disabled={saving}
+                className="btn btn-secondary"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+
+          {provider?.keyUrl && (
+            <a
+              href={provider.keyUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-block text-xs font-medium text-accent hover:underline"
+            >
+              Get a {providerName} key
+            </a>
+          )}
+        </Section>
+
+        <Section
+          title="Model"
+          description="Every provider here speaks the OpenAI chat-completions format, so switching is a base URL and a model id."
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-black/60 dark:text-white/60">
+              <label className="label" htmlFor="provider">
                 Provider
               </label>
               <select
+                id="provider"
                 value={llm.provider}
                 onChange={(e) => {
                   // Carry the provider's own endpoint and default model across, so
@@ -189,7 +251,7 @@ export default function SettingsPage() {
                     },
                   }));
                 }}
-                className={INPUT}
+                className="field"
               >
                 {PROVIDERS.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -199,15 +261,16 @@ export default function SettingsPage() {
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-black/60 dark:text-white/60">
+              <label className="label" htmlFor="model">
                 Model
               </label>
               <input
+                id="model"
                 list="model-options"
                 value={llm.model}
                 onChange={(e) => patch((s) => ({ ...s, llm: { ...s.llm, model: e.target.value } }))}
                 placeholder="anthropic/claude-sonnet-4.5"
-                className={INPUT}
+                className="field"
               />
               <datalist id="model-options">
                 {(models.length ? models : (provider?.models ?? [])).map((m) => (
@@ -218,84 +281,27 @@ export default function SettingsPage() {
           </div>
 
           <div className="mt-4">
-            <label className="mb-1 block text-xs font-medium text-black/60 dark:text-white/60">
+            <label className="label" htmlFor="base-url">
               Base URL
             </label>
             <input
+              id="base-url"
               value={llm.base_url}
               onChange={(e) => patch((s) => ({ ...s, llm: { ...s.llm, base_url: e.target.value } }))}
-              className={INPUT}
+              className="field font-mono text-xs"
             />
-          </div>
-
-          {/* API key - the visitor's own, never shared */}
-          <div className="mt-4 rounded-lg border border-black/10 p-4 dark:border-white/10">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Your {provider?.label.split(" (")[0] ?? "provider"} API key</p>
-              <span
-                className={`rounded px-2 py-0.5 text-[10px] font-medium uppercase ${
-                  needsKey
-                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                    : "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                }`}
-              >
-                {needsKey ? "Key required" : keySet ? "Your key is set" : "No key needed"}
-              </span>
-            </div>
-            <p className="mt-1 text-xs text-black/50 dark:text-white/50">
-              This demo runs on your own key, so nobody else spends it. It is stored in an
-              httpOnly cookie in your browser, never sent anywhere but your chosen provider,
-              and never readable by the page.
-              {provider?.keyUrl ? (
-                <>
-                  {" "}
-                  <a
-                    href={provider.keyUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
-                  >
-                    Get a {provider.label.split(" (")[0]} key →
-                  </a>
-                </>
-              ) : null}
-            </p>
-            <div className="mt-3 flex gap-2">
-              <input
-                type="password"
-                value={apiKeyInput}
-                onChange={(e) => setApiKeyInput(e.target.value)}
-                placeholder={provider?.keyPlaceholder ?? "your API key"}
-                className={INPUT}
-              />
-              <button
-                onClick={() => {
-                  apply({ api_key: apiKeyInput }, "Key saved");
-                  setApiKeyInput("");
-                }}
-                disabled={saving || !apiKeyInput.trim()}
-                className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40"
-              >
-                Save key
-              </button>
-              {keySet && (
-                <button
-                  onClick={() => apply({ api_key: "" }, "Key removed")}
-                  disabled={saving}
-                  className="shrink-0 rounded-lg border border-black/15 px-3 py-2 text-sm font-medium text-black/60 hover:bg-black/5 disabled:opacity-40 dark:border-white/20 dark:text-white/60 dark:hover:bg-white/5"
-                >
-                  Remove
-                </button>
-              )}
-            </div>
           </div>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-black/60 dark:text-white/60">
-                Temperature ({gen.temperature.toFixed(2)})
+              <label className="label" htmlFor="temperature">
+                Temperature
+                <span className="ml-1 font-mono tabular-nums text-faint">
+                  {gen.temperature.toFixed(2)}
+                </span>
               </label>
               <input
+                id="temperature"
                 type="range"
                 min={0}
                 max={1}
@@ -304,14 +310,15 @@ export default function SettingsPage() {
                 onChange={(e) =>
                   patch((s) => ({ ...s, gen: { ...s.gen, temperature: Number(e.target.value) } }))
                 }
-                className="w-full"
+                className="w-full accent-[var(--accent)]"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-black/60 dark:text-white/60">
+              <label className="label" htmlFor="max-tokens">
                 Max tokens
               </label>
               <input
+                id="max-tokens"
                 type="number"
                 min={1}
                 max={8192}
@@ -319,125 +326,101 @@ export default function SettingsPage() {
                 onChange={(e) =>
                   patch((s) => ({ ...s, gen: { ...s.gen, max_tokens: Number(e.target.value) } }))
                 }
-                className={INPUT}
+                className="field"
               />
             </div>
           </div>
 
-          <div className="mt-2">
+          <div className="mt-2 divide-y divide-[var(--line)]">
             <Toggle
               checked={llm.enable_thinking}
               onChange={(v) => patch((s) => ({ ...s, llm: { ...s.llm, enable_thinking: v } }))}
-              label="Enable reasoning"
-              description="Let reasoning models think before answering (slower; Ollama only effect)."
+              label="Reasoning"
+              description="Let reasoning models think before answering. Slower, and only meaningful on models that support it."
             />
           </div>
 
-          <div className="mt-4 flex items-center gap-3">
-            <button
-              onClick={runTest}
-              disabled={testing}
-              className="rounded-lg border border-black/15 px-3 py-2 text-sm font-medium text-black/70 hover:bg-black/5 disabled:opacity-40 dark:border-white/20 dark:text-white/70 dark:hover:bg-white/5"
-            >
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button onClick={runTest} disabled={testing} className="btn btn-secondary btn-sm">
               {testing ? "Testing..." : "Test connection"}
             </button>
             {testResult && (
               <span
-                className={`text-sm ${
-                  testResult.ok
-                    ? "text-green-600 dark:text-green-400"
-                    : "text-red-600 dark:text-red-400"
-                }`}
+                className={`flex items-center gap-1.5 text-sm ${testResult.ok ? "text-ok" : "text-danger"}`}
               >
-                {testResult.ok ? "✓" : "✗"} {testResult.model} - {testResult.detail}
+                {testResult.ok ? <IconCheck size={14} /> : <IconAlert size={14} />}
+                {testResult.model} - {testResult.detail}
               </span>
             )}
           </div>
-        </section>
+        </Section>
 
-        {/* Guardrails */}
-        <section className="mt-6 rounded-xl border border-black/10 bg-white p-6 dark:border-white/10 dark:bg-black">
-          <h2 className="text-lg font-semibold">Guardrails &amp; Safety</h2>
-          <p className="mt-1 text-sm text-black/50 dark:text-white/50">
-            The master switch gates every check below.
-          </p>
-
-          <div className="mt-3 divide-y divide-black/5 dark:divide-white/5">
+        <Section
+          title="Guardrails"
+          description="Input guardrails run before retrieval, output guardrails after generation. The first switch gates every other one."
+        >
+          <div className="divide-y divide-[var(--line)]">
             <Toggle
               checked={guardrails.enabled}
-              onChange={(v) =>
-                patch((s) => ({ ...s, guardrails: { ...s.guardrails, enabled: v } }))
-              }
+              onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, enabled: v } }))}
               label="Guardrails enabled"
-              description="Master kill switch for all input and output guardrails."
+              description="Master switch for every input and output check below."
             />
             <Toggle
               checked={guardrails.injection}
-              onChange={(v) =>
-                patch((s) => ({ ...s, guardrails: { ...s.guardrails, injection: v } }))
-              }
+              onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, injection: v } }))}
               label="Prompt-injection blocking"
-              description="Block known jailbreak / instruction-override patterns before retrieval."
+              description="Refuse known jailbreak and instruction-override patterns before retrieval runs."
               disabled={!guardrails.enabled}
             />
             <Toggle
               checked={guardrails.grounding}
-              onChange={(v) =>
-                patch((s) => ({ ...s, guardrails: { ...s.guardrails, grounding: v } }))
-              }
+              onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, grounding: v } }))}
               label="Citation grounding check"
-              description="Flag answers that cite sources outside the retrieved range."
+              description="Flag answers that cite a source outside the set that was actually retrieved."
               disabled={!guardrails.enabled}
             />
             <Toggle
               checked={guardrails.pii_detect}
-              onChange={(v) =>
-                patch((s) => ({ ...s, guardrails: { ...s.guardrails, pii_detect: v } }))
-              }
+              onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, pii_detect: v } }))}
               label="PII detection"
-              description="Flag emails, phone numbers, SSNs and cards in the answer."
+              description="Flag emails, phone numbers, national IDs and card numbers in the answer."
               disabled={!guardrails.enabled || guardrails.pii_mask}
             />
             <Toggle
               checked={guardrails.pii_mask}
-              onChange={(v) =>
-                patch((s) => ({ ...s, guardrails: { ...s.guardrails, pii_mask: v } }))
-              }
+              onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, pii_mask: v } }))}
               label="PII masking"
-              description="Replace detected PII with [REDACTED_*] placeholders in the answer."
+              description="Replace detected PII with [REDACTED_*] placeholders. Implies detection."
               disabled={!guardrails.enabled}
             />
             <Toggle
               checked={guardrails.safety}
               onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, safety: v } }))}
-              label="LLM safety classifier"
-              description="Run an optional ShieldGemma-style safety model on the input."
+              label="Safety classifier"
+              description="Run an optional ShieldGemma-style safety model over the input."
               disabled={!guardrails.enabled}
             />
           </div>
-        </section>
+        </Section>
 
-        {/* Rate limiting */}
-        <section className="mt-6 mb-8 rounded-xl border border-black/10 bg-white p-6 dark:border-white/10 dark:bg-black">
-          <h2 className="text-lg font-semibold">Rate Limiting</h2>
-          <p className="mt-1 text-sm text-black/50 dark:text-white/50">
-            Protects the shared demo key. Skipped automatically when you use your own key.
-          </p>
-
-          <div className="mt-3">
+        <Section
+          title="Rate limit"
+          description="A ceiling on questions per minute. Skipped entirely when the request runs on your own key."
+        >
+          <div className="divide-y divide-[var(--line)]">
             <Toggle
               checked={ratelimit.enabled}
-              onChange={(v) =>
-                patch((s) => ({ ...s, ratelimit: { ...s.ratelimit, enabled: v } }))
-              }
+              onChange={(v) => patch((s) => ({ ...s, ratelimit: { ...s.ratelimit, enabled: v } }))}
               label="Rate limiting enabled"
             />
           </div>
-          <div className="mt-2 max-w-[12rem]">
-            <label className="mb-1 block text-xs font-medium text-black/60 dark:text-white/60">
+          <div className="mt-3 max-w-40">
+            <label className="label" htmlFor="rpm">
               Requests per minute
             </label>
             <input
+              id="rpm"
               type="number"
               min={1}
               max={120}
@@ -448,11 +431,18 @@ export default function SettingsPage() {
                   ratelimit: { ...s.ratelimit, per_minute: Number(e.target.value) },
                 }))
               }
-              className={INPUT}
+              className="field"
+              disabled={!ratelimit.enabled}
             />
           </div>
-        </section>
+        </Section>
+
+        <div className="mt-6 mb-4 flex justify-end">
+          <button onClick={saveAll} disabled={saving} className="btn btn-primary">
+            {saving ? "Saving..." : "Save changes"}
+          </button>
+        </div>
       </div>
-    </Sidebar>
+    </AppShell>
   );
 }
