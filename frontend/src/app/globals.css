@@ -1,26 +1,571 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ─────────────────────────────────────────────────────────────────────────────
+   Design tokens.
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+   The complete light palette is defined on bare :root so a colour always has a
+   value outside any media query. Dark is redefined twice: once under
+   prefers-color-scheme (guarded so an explicit light choice still wins) and once
+   under [data-theme="dark"] (so the toggle wins in both directions). An explicit
+   user choice outranks the system default, never the other way round.
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  color-scheme: light;
+
+  --bg: #f3f4f7;
+  --surface: #ffffff;
+  --surface-2: #f8f9fb;
+  --surface-sunken: #eef0f4;
+  --line: #e2e5eb;
+  --line-strong: #cdd2dc;
+
+  --fg: #0d1117;
+  --fg-muted: #4c5566;
+  --fg-faint: #798296;
+
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-soft: #eef0ff;
+  --accent-line: #c9ccfa;
+  --on-accent: #ffffff;
+
+  --ok: #0f7b52;
+  --ok-soft: #e4f5ec;
+  --ok-line: #b7e2cd;
+  --warn: #96600a;
+  --warn-soft: #fbf1de;
+  --warn-line: #ecd5a5;
+  --danger: #b3261e;
+  --danger-soft: #fceceb;
+  --danger-line: #f0c4c1;
+  --info: #1c5fa8;
+  --info-soft: #e8f1fc;
+  --info-line: #bcd5f1;
+
+  --scrim: rgb(13 17 23 / 0.42);
+  --glass: rgb(255 255 255 / 0.72);
+
+  --shadow-1: 0 1px 2px rgb(13 17 23 / 0.05), 0 1px 3px rgb(13 17 23 / 0.04);
+  --shadow-2:
+    0 4px 12px -2px rgb(13 17 23 / 0.09), 0 2px 6px -3px rgb(13 17 23 / 0.06);
+  --shadow-3:
+    0 24px 56px -16px rgb(13 17 23 / 0.26), 0 8px 20px -12px rgb(13 17 23 / 0.14);
+
+  /* Motion. Response 0.24-0.4s. `--ease-out` is critically damped (no overshoot);
+     `--ease-spring` carries a slight overshoot and is used only where the motion
+     follows a gesture or a throw. */
+  --dur-press: 110ms;
+  --dur: 200ms;
+  --dur-move: 380ms;
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.32, 0.64, 1);
+
+  --rail: 15rem;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg: #090b0f;
+    --surface: #12151b;
+    --surface-2: #171b23;
+    --surface-sunken: #0d1015;
+    --line: #232936;
+    --line-strong: #363e4e;
+
+    --fg: #e9ecf2;
+    --fg-muted: #a3accd;
+    --fg-faint: #737d92;
+
+    --accent: #8b8cff;
+    --accent-hover: #a3a4ff;
+    --accent-soft: #1a1b32;
+    --accent-line: #343573;
+    --on-accent: #0a0b16;
+
+    --ok: #4ec98d;
+    --ok-soft: #0e2a1d;
+    --ok-line: #1d4a34;
+    --warn: #e0a648;
+    --warn-soft: #2a2010;
+    --warn-line: #4d3a17;
+    --danger: #f2786e;
+    --danger-soft: #2c1513;
+    --danger-line: #542421;
+    --info: #6aabf2;
+    --info-soft: #101f2f;
+    --info-line: #1f3b58;
+
+    --scrim: rgb(0 0 0 / 0.62);
+    --glass: rgb(18 21 27 / 0.72);
+
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-2: 0 4px 12px -2px rgb(0 0 0 / 0.5), 0 2px 6px -3px rgb(0 0 0 / 0.4);
+    --shadow-3: 0 24px 56px -16px rgb(0 0 0 / 0.7), 0 8px 20px -12px rgb(0 0 0 / 0.5);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #090b0f;
+  --surface: #12151b;
+  --surface-2: #171b23;
+  --surface-sunken: #0d1015;
+  --line: #232936;
+  --line-strong: #363e4e;
+
+  --fg: #e9ecf2;
+  --fg-muted: #a3accd;
+  --fg-faint: #737d92;
+
+  --accent: #8b8cff;
+  --accent-hover: #a3a4ff;
+  --accent-soft: #1a1b32;
+  --accent-line: #343573;
+  --on-accent: #0a0b16;
+
+  --ok: #4ec98d;
+  --ok-soft: #0e2a1d;
+  --ok-line: #1d4a34;
+  --warn: #e0a648;
+  --warn-soft: #2a2010;
+  --warn-line: #4d3a17;
+  --danger: #f2786e;
+  --danger-soft: #2c1513;
+  --danger-line: #542421;
+  --info: #6aabf2;
+  --info-soft: #101f2f;
+  --info-line: #1f3b58;
+
+  --scrim: rgb(0 0 0 / 0.62);
+  --glass: rgb(18 21 27 / 0.72);
+
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-2: 0 4px 12px -2px rgb(0 0 0 / 0.5), 0 2px 6px -3px rgb(0 0 0 / 0.4);
+  --shadow-3: 0 24px 56px -16px rgb(0 0 0 / 0.7), 0 8px 20px -12px rgb(0 0 0 / 0.5);
+}
+
+/* Expose the palette as Tailwind colours, so `bg-surface` / `text-muted` /
+   `border-line` are theme-aware with no `dark:` variant anywhere. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-sunken: var(--surface-sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-faint: var(--fg-faint);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-line: var(--accent-line);
+  --color-on-accent: var(--on-accent);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-sans);
+    /* Tracking is size-specific: body sits at 0 and headings tighten below. */
+    letter-spacing: 0;
+  }
+
+  h1 {
+    letter-spacing: -0.022em;
+    line-height: 1.1;
+  }
+  h2 {
+    letter-spacing: -0.016em;
+    line-height: 1.2;
+  }
+  h3 {
+    letter-spacing: -0.01em;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--fg);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Scrollbars follow the theme rather than punching a light strip into dark UI. */
+  * {
+    scrollbar-color: var(--line-strong) transparent;
+    scrollbar-width: thin;
+  }
+}
+
+@layer components {
+  /* ── Surfaces ─────────────────────────────────────────────────────────── */
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: var(--shadow-1);
+  }
+
+  .card-flat {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+
+  /* A floating functional layer: content scrolls underneath it. */
+  .glass {
+    background: var(--glass);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  }
+
+  .hairline {
+    border-color: var(--line);
+  }
+
+  /* ── Buttons ──────────────────────────────────────────────────────────── */
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 10px;
+    padding: 0.5rem 0.875rem;
+    font-size: 0.875rem;
+    font-weight: 550;
+    line-height: 1.25rem;
+    white-space: nowrap;
+    cursor: pointer;
+    border: 1px solid transparent;
+    /* Colour settles fast; the press scale is faster still so the surface reacts
+       under the finger rather than after the click. */
+    transition:
+      background-color var(--dur) var(--ease-out),
+      border-color var(--dur) var(--ease-out),
+      color var(--dur) var(--ease-out),
+      transform var(--dur-press) var(--ease-out);
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--on-accent);
+    box-shadow: var(--shadow-1);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--fg);
+    border-color: var(--line-strong);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--surface-2);
+    border-color: var(--fg-faint);
+  }
+
+  .btn-ghost {
+    background: transparent;
+    color: var(--fg-muted);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--surface-sunken);
+    color: var(--fg);
+  }
+
+  .btn-danger {
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-color: var(--danger-line);
+  }
+
+  .btn-sm {
+    padding: 0.3125rem 0.625rem;
+    font-size: 0.8125rem;
+    border-radius: 8px;
+  }
+
+  .btn-icon {
+    padding: 0.5rem;
+    border-radius: 10px;
+  }
+
+  /* ── Fields ───────────────────────────────────────────────────────────── */
+
+  .field {
+    width: 100%;
+    background: var(--surface);
+    color: var(--fg);
+    border: 1px solid var(--line-strong);
+    border-radius: 10px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.375rem;
+    outline: none;
+    transition:
+      border-color var(--dur) var(--ease-out),
+      box-shadow var(--dur) var(--ease-out);
+  }
+  .field::placeholder {
+    color: var(--fg-faint);
+  }
+  .field:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .field:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  select.field {
+    appearance: none;
+    padding-right: 2rem;
+    background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position:
+      calc(100% - 1rem) calc(50% + 2px),
+      calc(100% - 0.7rem) calc(50% + 2px);
+    background-size:
+      5px 5px,
+      5px 5px;
+    background-repeat: no-repeat;
+  }
+
+  .label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 550;
+    color: var(--fg-muted);
+    margin-bottom: 0.375rem;
+  }
+
+  /* ── Badges ───────────────────────────────────────────────────────────── */
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    /* Small caps text needs positive tracking to stay legible. */
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .badge-ok {
+    background: var(--ok-soft);
+    color: var(--ok);
+    border-color: var(--ok-line);
+  }
+  .badge-info {
+    background: var(--info-soft);
+    color: var(--info);
+    border-color: var(--info-line);
+  }
+  .badge-warn {
+    background: var(--warn-soft);
+    color: var(--warn);
+    border-color: var(--warn-line);
+  }
+  .badge-danger {
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-color: var(--danger-line);
+  }
+  .badge-accent {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-color: var(--accent-line);
+  }
+  .badge-neutral {
+    background: var(--surface-sunken);
+    color: var(--fg-muted);
+    border-color: var(--line);
+  }
+
+  /* Section eyebrow: uppercase micro type wants the most tracking of all. */
+  .eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--fg-faint);
+  }
+
+  /* ── Dialog ───────────────────────────────────────────────────────────── */
+
+  /* Built on the native element: focus trapping, Escape, inertness and the
+     top layer come from the platform rather than from hand-rolled JS. */
+  .dialog {
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: var(--surface);
+    color: var(--fg);
+    box-shadow: var(--shadow-3);
+    max-height: min(85vh, 46rem);
+    max-width: min(94vw, 42rem);
+    width: 100%;
+    overflow: hidden;
+  }
+  .dialog[open] {
+    display: flex;
+    flex-direction: column;
+  }
+  .dialog::backdrop {
+    background: var(--scrim);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+  }
+  /* Materialize: scale and blur arrive together so it reads as a surface, not a
+     fading picture. Anchored to the viewport centre, which is where it exits to. */
+  .dialog[open] {
+    animation: dialog-in var(--dur-move) var(--ease-out);
+  }
+  .dialog[open]::backdrop {
+    animation: scrim-in var(--dur) var(--ease-out);
+  }
+
+  @keyframes dialog-in {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.97);
+    }
+  }
+  @keyframes scrim-in {
+    from {
+      opacity: 0;
+    }
+  }
+}
+
+@layer utilities {
+  .pulse-dot {
+    position: relative;
+  }
+  .pulse-dot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 999px;
+    background: currentColor;
+    animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+  @keyframes ping {
+    75%,
+    100% {
+      transform: scale(2.2);
+      opacity: 0;
+    }
+  }
+
+  /* Caret that trails streamed text while tokens are still arriving. */
+  .caret::after {
+    content: "";
+    display: inline-block;
+    width: 0.5ch;
+    height: 1em;
+    margin-left: 1px;
+    vertical-align: text-bottom;
+    background: var(--accent);
+    animation: blink 1s steps(2, start) infinite;
+  }
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  .scroll-fade {
+    mask-image: linear-gradient(to bottom, transparent, #000 1.5rem);
+  }
+}
+
+/* ── Accessibility signals, honoured independently ─────────────────────── */
+
+/* Reduced motion is a gentler equivalent, not the absence of feedback: the
+   travel and the overshoot go, the opacity change stays. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-move: 150ms;
+    --ease-out: ease;
+    --ease-spring: ease;
+  }
+  .dialog[open] {
+    animation: scrim-in var(--dur) ease;
+  }
+  .pulse-dot::after,
+  .caret::after {
+    animation: none;
+  }
+  .btn:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: var(--surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .dialog::backdrop {
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --line: var(--line-strong);
+    --fg-muted: var(--fg);
+    --fg-faint: var(--fg-muted);
+  }
+  .card,
+  .card-flat,
+  .field {
+    border-width: 1.5px;
+  }
+  .glass {
+    background: var(--surface);
+    backdrop-filter: none;
+  }
 }

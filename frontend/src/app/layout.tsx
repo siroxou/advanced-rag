@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import OnboardingTour from "@/components/OnboardingTour";
 
@@ -14,10 +15,23 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Enterprise Agentic RAG",
+  title: "Acme RAG - enterprise retrieval with access control",
   description:
-    "Context-aware, multi-agent RAG with document-level RBAC, guardrails, and a local Gemma 4.",
+    "A multi-agent document assistant that enforces who can see what, cites every claim, and refuses rather than hallucinates.",
 };
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f3f4f7" },
+    { media: "(prefers-color-scheme: dark)", color: "#090b0f" },
+  ],
+};
+
+/**
+ * Applies the stored theme before first paint. Without this the page renders in
+ * the system theme and then snaps to the chosen one after hydration.
+ */
+const THEME_SCRIPT = `try{var t=localStorage.getItem("rag_theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t)}catch(e){}`;
 
 export default function RootLayout({
   children,
@@ -27,9 +41,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+      className={`${geistSans.variable} ${geistMono.variable} h-full`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full">
+        <Script id="theme" strategy="beforeInteractive">
+          {THEME_SCRIPT}
+        </Script>
         {children}
         <OnboardingTour />
       </body>
