@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { API_BASE, type DocumentChunk } from "@/lib/api";
+import { API_BASE, demoHeaders, type DocumentChunk } from "@/lib/api";
 
 const SENSITIVITY_CLASSES: Record<string, string> = {
   public: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
@@ -43,7 +43,9 @@ export default function DocumentPreviewModal({
     setLoading(true);
     setError(null);
     try {
-      const r = await fetch(`${API_BASE}/api/documents/${docId}/chunks`);
+      const r = await fetch(`${API_BASE}/api/documents/${docId}/chunks`, {
+        headers: demoHeaders(),
+      });
       if (!r.ok) throw new Error(`${r.status}`);
       const data: DocumentChunk[] = await r.json();
       setChunks(data);

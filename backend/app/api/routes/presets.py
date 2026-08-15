@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import CurrentUser, RequireAdmin, get_current_user
 from app.core.db import get_session
 from app.core.logging import get_logger
 from app.ingestion.hf_dataset import ingest_hf, ingest_hf_pdfs
@@ -36,7 +37,9 @@ class PresetIngestRequest(BaseModel):
 
 
 @router.get("/presets")
-async def list_presets_endpoint() -> list[dict[str, Any]]:
+async def list_presets_endpoint(
+    _: CurrentUser = Depends(get_current_user),
+) -> list[dict[str, Any]]:
     """Return the list of available corpus presets."""
     return [
         {
@@ -58,8 +61,13 @@ async def ingest_preset(
     name: str,
     body: PresetIngestRequest | None = None,
     session: AsyncSession = Depends(get_session),
+    _: CurrentUser = RequireAdmin,
 ) -> dict[str, Any]:
-    """Ingest a corpus preset by name. Options come from the JSON request body."""
+    """Ingest a corpus preset by name. Options come from the JSON request body.
+
+    Admin-only: it downloads and embeds an entire dataset, and the caller chooses
+    the ACL every resulting chunk is stored with.
+    """
     opts = body or PresetIngestRequest()
     preset = get_preset(name)
 

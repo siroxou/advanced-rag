@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUser, get_current_user
+from app.api.deps import CurrentUser, RequireAdmin
 from app.core.db import get_session
 from app.db.models import User
 from app.security.passwords import hash_password
@@ -22,7 +22,7 @@ router = APIRouter()
 @router.get("/admin/users")
 async def list_users(
     session: AsyncSession = Depends(get_session),
-    user: CurrentUser = Depends(get_current_user),
+    _: CurrentUser = RequireAdmin,
 ) -> list[dict[str, Any]]:
     """List all users with their roles and active status."""
     result = await session.execute(select(User).order_by(User.created_at.desc()))
@@ -45,7 +45,7 @@ async def create_user(
     password: str,
     roles: str = "viewer",
     session: AsyncSession = Depends(get_session),
-    admin: CurrentUser = Depends(get_current_user),
+    _: CurrentUser = RequireAdmin,
 ) -> dict[str, Any]:
     """Create a new user with specified roles."""
     # Check if user already exists
@@ -78,7 +78,7 @@ async def update_user_roles(
     username: str,
     roles: str,
     session: AsyncSession = Depends(get_session),
-    admin: CurrentUser = Depends(get_current_user),
+    _: CurrentUser = RequireAdmin,
 ) -> dict[str, Any]:
     """Update a user's roles."""
     result = await session.execute(select(User).where(User.username == username))
@@ -104,7 +104,7 @@ async def update_user_roles(
 async def toggle_user_active(
     username: str,
     session: AsyncSession = Depends(get_session),
-    admin: CurrentUser = Depends(get_current_user),
+    _: CurrentUser = RequireAdmin,
 ) -> dict[str, Any]:
     """Enable/disable a user account."""
     result = await session.execute(select(User).where(User.username == username))

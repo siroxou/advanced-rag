@@ -7,6 +7,21 @@
 // backend (e.g. http://localhost:8000) to run against the full local stack.
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
+/**
+ * Forward the role switcher's choice to the FastAPI backend.
+ *
+ * The Next.js demo handlers read the `demo_roles` cookie directly, but a request
+ * to a separate origin never carries it, so the role switcher would silently do
+ * nothing against the real backend. The header is only honoured while auth is
+ * off, and it authorizes nothing: the roles are handed to the Postgres RLS
+ * policy, which is what actually decides the answer.
+ */
+export function demoHeaders(): Record<string, string> {
+  if (typeof document === "undefined") return {};
+  const m = document.cookie.match(/(?:^|;\s*)demo_roles=([^;]+)/);
+  return m ? { "X-Demo-Roles": decodeURIComponent(m[1]) } : {};
+}
+
 const TOKEN_KEY = "rag_token";
 
 export type User = { username: string; roles: string[] };

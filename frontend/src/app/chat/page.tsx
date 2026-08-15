@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import DocumentPreviewModal from "@/components/DocumentPreviewModal";
 import Sidebar from "@/components/Sidebar";
-import { API_BASE, type Source } from "@/lib/api";
+import { API_BASE, demoHeaders, type Source } from "@/lib/api";
 
 type Guardrails = {
   input_blocked?: boolean;
@@ -200,7 +200,7 @@ export default function ChatPage() {
     try {
       const res = await fetch(`${API_BASE}/api/chat/stream`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...demoHeaders() },
         body: JSON.stringify({ messages: outgoing, use_rag: true }),
       });
       if (!res.ok || !res.body) throw new Error(`API returned ${res.status}`);

@@ -60,12 +60,16 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 720  # 12h dev sessions
     # Portfolio demo runs without a login wall: requests with no/invalid JWT fall
-    # back to a demo identity carrying ``demo_roles``. The RLS machinery is
-    # unchanged - these roles still flow into the Postgres policy. Set
-    # ``auth_required=true`` to restore the hard JWT gate.
+    # back to a demo identity carrying ``demo_roles`` (overridable per request via
+    # the X-Demo-Roles header, so the UI role switcher works). The RLS machinery is
+    # unchanged - these roles still flow into the Postgres policy, and the demo
+    # identity is never authenticated, so it cannot reach a mutating endpoint.
+    # Set ``auth_required=true`` to restore the hard JWT gate.
     auth_required: bool = False
     demo_username: str = "demo"
-    demo_roles: str = "viewer,analyst,admin"
+    # Least privilege by default: the demo starts as a viewer, which is what makes
+    # the RBAC refusal visible on first run instead of invisible.
+    demo_roles: str = "viewer"
 
     # --- Web search (Phase 3) ----------------------------------------------------
     tavily_api_key: str = ""

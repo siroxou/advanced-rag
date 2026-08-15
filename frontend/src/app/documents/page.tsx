@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 
 import DocumentPreviewModal from "@/components/DocumentPreviewModal";
 import Sidebar from "@/components/Sidebar";
-import { API_BASE, updateDocument, type DocumentInfo } from "@/lib/api";
+import { API_BASE, demoHeaders, updateDocument, type DocumentInfo } from "@/lib/api";
 
 // Default role set per tier, mirroring the backend auto-classifier. Selecting a
 // sensitivity prefills these; the operator can still override.
@@ -76,7 +76,7 @@ export default function DocumentsPage() {
 
   const fetchDocuments = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/documents`);
+      const res = await fetch(`${API_BASE}/api/documents`, { headers: demoHeaders() });
       if (res.ok) {
         const docs = await res.json();
         setDocuments(docs);

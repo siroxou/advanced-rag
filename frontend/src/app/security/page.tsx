@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import Sidebar from "@/components/Sidebar";
-import { API_BASE, type AuditEntry } from "@/lib/api";
+import { API_BASE, demoHeaders, type AuditEntry } from "@/lib/api";
 
 export default function SecurityPage() {
   const [auditLogs, setAuditLogs] = useState<AuditEntry[]>([]);
@@ -13,7 +13,9 @@ export default function SecurityPage() {
 
   const fetchAudit = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/audit?limit=${LIMIT}&offset=${page * LIMIT}`);
+      const res = await fetch(`${API_BASE}/api/audit?limit=${LIMIT}&offset=${page * LIMIT}`, {
+        headers: demoHeaders(),
+      });
       if (res.ok) {
         const data = await res.json();
         setAuditLogs(data.entries);

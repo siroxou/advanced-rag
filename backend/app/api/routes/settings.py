@@ -10,9 +10,10 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from app.api.deps import CurrentUser, RequireAdmin, get_current_user
 from app.core.logging import get_logger
 from app.core.runtime_settings import runtime
 from app.llm.providers import OpenAICompatibleProvider
@@ -77,14 +78,23 @@ _KEY_MAP = {
 
 
 @router.get("/settings")
-async def get_settings_endpoint() -> dict[str, Any]:
+async def get_settings_endpoint(
+    _: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
     """Return the effective config (secrets masked)."""
     return runtime.snapshot()
 
 
 @router.put("/settings")
-async def update_settings_endpoint(body: SettingsPatch) -> dict[str, Any]:
-    """Apply a partial update, hot-reload the provider, and return the new snapshot."""
+async def update_settings_endpoint(
+    body: SettingsPatch,
+    _: CurrentUser = RequireAdmin,
+) -> dict[str, Any]:
+    """Apply a partial update, hot-reload the provider, and return the new snapshot.
+
+    Admin-only: this can disable every guardrail, lift the rate limit, replace the
+    API key, and repoint the model endpoint at an arbitrary host.
+    """
     patch = {
         _KEY_MAP[field]: value
         for field, value in body.model_dump(exclude_none=True).items()
@@ -96,7 +106,9 @@ async def update_settings_endpoint(body: SettingsPatch) -> dict[str, Any]:
 
 
 @router.get("/settings/models")
-async def list_models_endpoint() -> dict[str, Any]:
+async def list_models_endpoint(
+    _: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
     """Proxy the provider's model catalogue (OpenRouter), failing soft to a static list."""
     url = runtime.get_llm_base_url().rstrip("/") + "/models"
     key = runtime.get_resolved_api_key()
@@ -114,8 +126,13 @@ async def list_models_endpoint() -> dict[str, Any]:
 
 
 @router.post("/settings/test-llm")
-async def test_llm_endpoint() -> dict[str, Any]:
-    """Probe the currently configured provider for reachability."""
+async def test_llm_endpoint(
+    _: CurrentUser = RequireAdmin,
+) -> dict[str, Any]:
+    """Probe the currently configured provider for reachability.
+
+    Admin-only: it spends the configured API key on an outbound call.
+    """
     provider = OpenAICompatibleProvider(
         name=runtime.get_llm_provider(),
         model=runtime.get_llm_model(),

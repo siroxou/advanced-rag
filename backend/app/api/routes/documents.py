@@ -14,7 +14,7 @@ from sqlalchemy import select, text
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import CurrentUser, get_current_user
+from app.api.deps import CurrentUser, RequireAdmin, get_current_user
 from app.core.db import get_session
 from app.db.models import Chunk, Document
 from app.ingestion.pipeline import ingest_pdf
@@ -80,9 +80,12 @@ async def upload_document(
     sensitivity: str = "internal",
     allowed_roles: str = "viewer",
     session: AsyncSession = Depends(get_session),
-    user: CurrentUser = Depends(get_current_user),
+    _: CurrentUser = RequireAdmin,
 ) -> dict[str, Any]:
-    """Upload a PDF and ingest it into the vector store."""
+    """Upload a PDF and ingest it into the vector store.
+
+    Admin-only: the caller picks the ACL the resulting chunks are stored with.
+    """
     filename = file.filename or ""
     if not filename.endswith(".pdf"):
         raise HTTPException(400, "Only PDF files are supported")
@@ -128,8 +131,21 @@ async def list_documents(
     session: AsyncSession = Depends(get_session),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[dict[str, Any]]:
-    """List all documents the user has access to."""
-    result = await session.execute(select(Document).order_by(Document.created_at.desc()))
+    """List the documents this caller may see.
+
+    ``documents`` carries no RLS policy of its own, so visibility is derived from
+    ``chunks``, which does: a document is listed only when at least one of its
+    chunks survives the policy. That keeps one source of truth for access rather
+    than a second ACL check that could drift from the first.
+    """
+    await session.execute(
+        text("SELECT set_config('app.user_roles', :roles, true)"),
+        {"roles": ",".join(user.roles)},
+    )
+    visible_docs = select(Chunk.doc_id).distinct()
+    result = await session.execute(
+        select(Document).where(Document.id.in_(visible_docs)).order_by(Document.created_at.desc())
+    )
     docs = result.scalars().all()
     return [
         {
@@ -179,9 +195,13 @@ async def update_document(
     doc_id: str,
     body: DocumentUpdate,
     session: AsyncSession = Depends(get_session),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = RequireAdmin,
 ) -> dict[str, Any]:
-    """Re-classify a document: update its sensitivity and cascade ACLs to its chunks."""
+    """Re-classify a document: update its sensitivity and cascade ACLs to its chunks.
+
+    Admin-only: this rewrites the ACL of every chunk in the document, so an
+    unprivileged caller could otherwise downgrade restricted material to public.
+    """
     doc = await reclassify_document(
         session,
         doc_id=doc_id,
@@ -208,9 +228,9 @@ async def update_document(
 async def delete_document(
     doc_id: str,
     session: AsyncSession = Depends(get_session),
-    user: CurrentUser = Depends(get_current_user),
+    _: CurrentUser = RequireAdmin,
 ) -> dict[str, str]:
-    """Delete a document and all its chunks."""
+    """Delete a document and all its chunks. Admin-only."""
     from sqlalchemy import delete as pg_delete
 
     result = await session.execute(select(Document).where(Document.id == doc_id))
