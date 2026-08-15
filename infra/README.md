@@ -18,6 +18,19 @@ helm lint infra/helm && helm template advanced-rag infra/helm   # validate the c
 terraform -chdir=infra/terraform init -backend=false && terraform -chdir=infra/terraform validate
 ```
 
+**Images are not built by CI.** The chart expects two of them - the backend and the
+frontend are different runtimes and cannot share one - and neither is published, so
+`helm install` will not pull anything until you build and push:
+
+```
+backend  -> ghcr.io/<you>/advanced-rag-backend   (backend/Dockerfile)
+frontend -> ghcr.io/<you>/advanced-rag-frontend  (no Dockerfile here; the hosted
+                                                  demo deploys to Vercel instead)
+```
+
+Override `image.registry`, `backend.repository`, and `frontend.repository` to point
+at your own registry.
+
 The **live demo** runs cheaply, no cluster required:
 
 - **Vercel** (frontend) - `infra` is not needed; `frontend/vercel.json` + the dashboard env.

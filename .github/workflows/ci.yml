@@ -62,7 +62,7 @@ jobs:
       - run: uv run pytest -q -m integration
 
   frontend:
-    name: Frontend (build)
+    name: Frontend (lint · build)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -78,6 +78,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
       - run: pnpm build
 
   iac:

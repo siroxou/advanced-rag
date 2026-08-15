@@ -110,9 +110,11 @@ export default function Home() {
       {/* Footer */}
       <footer className="mt-14 border-t border-black/10 pt-6 text-center text-xs text-black/45 dark:border-white/10 dark:text-white/45">
         <p className="mx-auto max-w-2xl">
-          This hosted demo runs a curated corpus with the model served via OpenRouter. The full
-          system - FastAPI, LangGraph agents, Postgres Row-Level Security, BGE-M3 retrieval, and a
-          local Gemma 4 - is open source.
+          This hosted demo runs a curated corpus with the model served via OpenRouter, and it
+          simulates role-based access in the browser layer. In the full system that access check
+          is enforced by Postgres Row-Level Security, so the database itself refuses rows the
+          caller may not read. That system - FastAPI, LangGraph agents, RLS, BGE-M3 hybrid
+          retrieval, and a local Gemma 4 - is open source.
         </p>
         <p className="mt-2">
           <a

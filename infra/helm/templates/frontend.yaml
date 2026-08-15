@@ -19,9 +19,8 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: {{ include "advanced-rag.image" . }}
+          image: {{ include "advanced-rag.image" (dict "root" $ "repository" .Values.frontend.repository) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["pnpm", "--dir", "frontend", "start"]
           ports:
             - containerPort: {{ .Values.frontend.port }}
           env:

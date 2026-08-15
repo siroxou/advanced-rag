@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: {{ include "advanced-rag.image" . }}
+          image: {{ include "advanced-rag.image" (dict "root" $ "repository" .Values.backend.repository) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.backend.port }}

@@ -26,20 +26,27 @@ that are easy to get wrong, each of which would silently disable the protection.
    - it fails closed rather than open.
 
 3. **The app connects as a non-superuser role, and the table is FORCE'd.** This is the subtle
-   part: a Postgres **superuser (or a role owning the table) bypasses RLS**. So the application
-   role is created `NOSUPERUSER NOBYPASSRLS`, and `chunks` is set `FORCE ROW LEVEL SECURITY` so
-   the policy applies even to the table owner. Migrations and ingestion run as a separate
-   privileged role; the request path never does.
+   part: a Postgres **superuser bypasses RLS entirely**, and `FORCE ROW LEVEL SECURITY` only
+   extends the policy to the table *owner*. Both are needed, and the first is easy to lose:
+   the official Postgres image creates `POSTGRES_USER` as a superuser, so a stock
+   `docker compose up` would have left the policy inert. `chunks` is FORCE'd in migration
+   0002, and [`infra/postgres/init/01-app-role.sql`](../../infra/postgres/init/01-app-role.sql)
+   demotes the app role on first init. CI reaches the same state explicitly, because service
+   containers cannot mount an init script.
 
    Reads are gated by the policy above; per-command `INSERT`/`UPDATE`/`DELETE` policies stay
    permissive so ingestion still works without granting any read access.
 
 ## Consequences
 
-- The guarantee is demonstrable: a raw `SELECT * FROM chunks` with **no WHERE clause** returns
-  only the rows the GUC permits. The app keeps an explicit ACL predicate too (defense in depth),
-  but correctness does not depend on it.
+- The guarantee is demonstrable *and tested*: [`backend/tests/test_rls.py`](../../backend/tests/test_rls.py)
+  counts rows with **no WHERE clause on roles** and asserts 1/2/3 visible by tier, 0 with the
+  GUC unset. It refuses to run against a role that can bypass RLS, because such a test would
+  otherwise pass for the wrong reason. The app keeps an explicit ACL predicate too (defense in
+  depth), but correctness does not depend on it.
 - Every answered query is recorded in an append-only `audit_log` (user, roles, query, retrieved
   doc ids, answer hash, latency).
-- Operational note: the demo's local Postgres role was demoted to non-superuser so FORCE RLS
-  binds; managed Postgres (Neon/Supabase) gives the app a non-superuser role by default.
+- Operational note: managed Postgres (Neon/Supabase) gives the app a non-superuser role by
+  default. On an *existing* local volume the init script will not re-run, so apply it by hand
+  or recreate the volume with `docker compose down -v && make up`. The test above is what
+  catches this either way.

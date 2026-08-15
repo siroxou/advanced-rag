@@ -1,12 +1,15 @@
 # Default values for the advanced-rag chart. Override per environment.
 
+# Backend and frontend are different runtimes, so they are different images.
+# Neither is built by CI - build and push them before installing this chart
+# (see infra/README.md).
 image:
   registry: ghcr.io
-  repository: siroxou/advanced-rag
   tag: latest
   pullPolicy: IfNotPresent
 
 backend:
+  repository: siroxou/advanced-rag-backend
   replicas: 2
   port: 8000
   # Non-secret config. Secrets (DATABASE_URL, JWT_SECRET, TAVILY_API_KEY, ...)
@@ -24,6 +27,7 @@ backend:
     limits: { cpu: "1", memory: "1Gi" }
 
 frontend:
+  repository: siroxou/advanced-rag-frontend
   replicas: 2
   port: 3000
   env:

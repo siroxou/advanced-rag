@@ -1,5 +1,6 @@
+{{/* Usage: include "advanced-rag.image" (dict "root" $ "repository" .Values.backend.repository) */}}
 {{- define "advanced-rag.image" -}}
-{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+{{ .root.Values.image.registry }}/{{ .repository }}:{{ .root.Values.image.tag }}
 {{- end -}}
 
 {{- define "advanced-rag.labels" -}}

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install api web up down lint fmt test pull-model check migrate corpus ingest classify ingest-auto hf-ingest presets preset seed dataset eval-lora dmg
+.PHONY: help install api web up down lint fmt test test-integration pull-model check migrate corpus ingest classify ingest-auto hf-ingest presets preset seed dataset eval-lora dmg
 
 help: ## Show available commands
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -28,6 +28,7 @@ dataset: ## Generate a grounded LoRA dataset from the corpus (-> ml/datasets)
 	cd backend && uv run python -m app.finetune.dataset --limit $(or $(LIMIT),200)
 
 eval-lora: ## Evaluate grounded answering on the held-out set (override LLM_MODEL to compare)
+	@test -f ml/datasets/valid.jsonl || { echo "ml/datasets/valid.jsonl not found - run 'make dataset' first."; exit 1; }
 	cd backend && uv run python -m app.finetune.evaluate --data ../ml/datasets/valid.jsonl
 
 corpus: ## Download a small sample PDF corpus into backend/data/raw
@@ -67,13 +68,17 @@ web: ## Run the Next.js frontend → http://localhost:3000
 dmg: ## Build a downloadable installer → dist/Advanced RAG.dmg
 	./scripts/build-dmg.sh
 
-lint: ## Lint + type-check the backend
-	cd backend && uv run ruff check . && uv run mypy app
+lint: ## Lint + type-check the backend (same checks as CI)
+	cd backend && uv run ruff check . && uv run ruff format --check . && uv run mypy app
+	cd frontend && pnpm lint
 
 fmt: ## Auto-format the backend
 	cd backend && uv run ruff format . && uv run ruff check --fix .
 
-test: ## Run backend tests
-	cd backend && uv run pytest -q
+test: ## Run the fast backend tests (no database needed)
+	cd backend && uv run pytest -q -m "not integration"
+
+test-integration: ## Run the Postgres-backed tests, incl. the RLS enforcement proof
+	cd backend && uv run pytest -q -m integration
 
 check: lint test ## Full quality gate (lint + types + tests)

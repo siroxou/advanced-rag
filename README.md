@@ -28,7 +28,7 @@ Most RAG demos answer questions over a pile of PDFs. Enterprises can't ship that
 ```mermaid
 flowchart TB
   U[User / Browser] --> FE[Next.js Frontend<br/>chat · admin/RBAC · dashboard]
-  FE -->|JWT + SSE stream| API[FastAPI Gateway<br/>auth · authz · rate-limit · audit]
+  FE -->|SSE stream · JWT for writes| API[FastAPI Gateway<br/>auth · authz · rate-limit · audit]
   API --> GIN[Input Guardrails<br/>ShieldGemma · injection check]
   GIN --> ORCH[LangGraph Supervisor]
   ORCH --> QUA[Context/Query agent<br/>rewrite · route]
@@ -48,13 +48,25 @@ flowchart TB
 
 ## Runtime profiles
 
-| Aspect | Local / Secure (MacBook) | Cloud / Demo (recruiters) |
+The system described above is the **full stack**. The hosted demo is a deliberately
+smaller thing, so the link stays free and instant, and this table says exactly which
+is which rather than letting the diagram imply the demo does more than it does.
+
+| Aspect | Full stack (local, or self-hosted) | Hosted demo (Vercel) |
 |---|---|---|
-| Gemma 4 | Ollama / MLX-LM (Metal) | vLLM on Modal (serverless GPU) |
-| Database | Postgres + pgvector (Docker) | Neon / Supabase (managed) |
-| Web search | off / self-hosted | Tavily (live) |
-| Hosting | `make api` / `make web` | Vercel + Modal |
-| Cost | $0, air-gappable | ~$0 idle (scale-to-zero) |
+| Model | Gemma 4 via Ollama / MLX-LM (Metal), or any OpenAI-compatible endpoint | OpenRouter (`anthropic/claude-haiku-4.5`) |
+| Retrieval | Hybrid dense + sparse over pgvector, RRF fused, cross-encoder rerank | Term-overlap scoring over a curated in-repo corpus |
+| RBAC | **Enforced by Postgres Row-Level Security** | Simulated in TypeScript over the same role tiers |
+| Storage | Postgres + pgvector (documents, chunks, users, audit) | None - cookies hold the session |
+| Web search | Tavily when a key is set | Off |
+| Runs with | `make api` / `make web` | Next.js route handlers on Vercel |
+| Cost | $0, air-gappable | ~$0 |
+
+The demo exists to make the *behaviour* clickable - switch role, watch the answer
+change, try an injection and see it blocked. The security guarantee it illustrates
+is only real in the full stack, where the database refuses the rows. Deploying the
+full stack (vLLM on Modal, Neon/Supabase for Postgres) is what
+[`infra/`](infra/) is for.
 
 ## Quickstart (local)
 
@@ -129,9 +141,17 @@ at it directly (streaming, so `--limit` never materialises the whole set):
 make hf-ingest DATASET=org/name LIMIT=200 ROLES=admin SENSITIVITY=restricted
 ```
 
-Open `http://localhost:3000/chat`, **sign in**, and ask. Your roles come from the login (a signed
-JWT), not the request - answers are grounded in the retrieved chunks with inline `[n]` citations,
-and the model refuses when the documents your roles can see do not support an answer.
+Open `http://localhost:3000/chat` and ask. Answers are grounded in the retrieved chunks
+with inline `[n]` citations, and the model refuses when the documents your roles can see
+do not support an answer.
+
+**Auth model.** There is no login wall, on purpose: a portfolio demo nobody can open
+proves nothing. Reads run as a demo identity whose roles come from the role switcher, so
+you can watch access control change in real time. That identity is never *authenticated*,
+so it can never write - upload, re-classify, delete, user management, and settings all
+require a signed token carrying `admin`, and return 401 without one. Set
+`AUTH_REQUIRED=true` to demand a JWT on every request instead. See
+[ADR-0010](docs/adr/0010-demo-identity-and-mutation-gating.md).
 
 **RBAC at the retrieval layer (the headline).** Tag documents for different roles, and Postgres
 **Row-Level Security** filters them per request - a `viewer` cannot retrieve, or even rank
@@ -141,13 +161,16 @@ against, an `admin`-only chunk:
 cd backend
 uv run python -m app.ingestion.cli --input data/raw/public.pdf     --source-id demo --roles viewer,analyst,admin --sensitivity public
 uv run python -m app.ingestion.cli --input data/raw/restricted.pdf --source-id demo --roles admin                --sensitivity restricted
-# sign in as viewer, ask about the restricted doc → "I don't have enough information ..."  (no leak)
-# sign in as admin,  ask the same question        → grounded answer with a [n] citation
+# switch to viewer, ask about the restricted doc → "I don't have enough information ..."  (no leak)
+# switch to admin,  ask the same question        → grounded answer with a [n] citation
 ```
 
 The guarantee is enforced by the database, not the app: a raw `SELECT * FROM chunks` with no
-WHERE clause returns only the rows the caller's roles permit. Retrieval itself is hybrid (dense
-pgvector + sparse full-text, fused with RRF) then a BGE cross-encoder rerank.
+WHERE clause returns only the rows the caller's roles permit, which is exactly what
+[`backend/tests/test_rls.py`](backend/tests/test_rls.py) asserts in CI - including a check
+that the app role cannot bypass RLS, since a superuser would silently make the whole policy
+a no-op. Retrieval itself is hybrid (dense pgvector + sparse full-text, fused with RRF) then
+a BGE cross-encoder rerank.
 See [ADR-0005](docs/adr/0005-hybrid-retrieval.md) and [ADR-0006](docs/adr/0006-rls-enforcement.md).
 
 **Multi-agent and context-aware (Phase 3).** Each query runs through a LangGraph supervisor:
@@ -201,14 +224,14 @@ docs/       architecture · ADRs · threat model · runbook
 - [x] **Phase 2** - RBAC via Postgres RLS: JWT auth, roles enforced in-database, append-only audit log
 - [x] **Phase 3** - LangGraph agents: context-rewrite + retrieval + permission-gated web search
 - [x] **Phase 4** - Layered guardrails: injection blocking, grounding/citation validation, PII scan
-- [ ] **Phase 5** - LoRA fine-tune: dataset generator + MLX config + eval harness + model card ready; training run pending
-- [ ] **Phase 6** - Helm + Terraform + Modal artifacts, CI eval gate, LangFuse hook ready (CI-validated); live cloud deploy pending
+- [x] **Phase 5** - LoRA fine-tune **scaffold**: dataset generator, MLX config, eval harness, model card. The training run itself is hours of local GPU time and is not done; the model card's metrics are marked TBD rather than invented.
+- [x] **Phase 6** - Helm + Terraform + Modal artifacts, CI eval gate, LangFuse hook - all committed and CI-validated. Deliberately not applied to a live cluster (see [ADR-0004](docs/adr/0004-iac-as-artifact.md)).
 - [x] **Phase 7** - Runtime config + operator controls: live model/provider switching (OpenRouter), bring-your-own key, per-guardrail toggles, PII masking, rate limiting, and in-place document re-tiering
 
 ## Documentation
 
 - [Architecture](docs/architecture.md) · [Threat model](docs/threat-model.md) · [Runbook](docs/runbook.md)
-- ADRs: [local Gemma on Apple Silicon](docs/adr/0002-local-gemma-on-apple-silicon.md) · [pgvector + RLS for RBAC](docs/adr/0003-pgvector-rls-for-rbac.md) · [IaC as artifact](docs/adr/0004-iac-as-artifact.md) · [hybrid retrieval](docs/adr/0005-hybrid-retrieval.md) · [RLS enforcement](docs/adr/0006-rls-enforcement.md) · [agentic orchestration](docs/adr/0007-agentic-orchestration.md) · [layered guardrails](docs/adr/0008-layered-guardrails.md) · [runtime settings + provider gateway](docs/adr/0009-runtime-settings-and-provider-gateway.md)
+- ADRs: [local Gemma on Apple Silicon](docs/adr/0002-local-gemma-on-apple-silicon.md) · [pgvector + RLS for RBAC](docs/adr/0003-pgvector-rls-for-rbac.md) · [IaC as artifact](docs/adr/0004-iac-as-artifact.md) · [hybrid retrieval](docs/adr/0005-hybrid-retrieval.md) · [RLS enforcement](docs/adr/0006-rls-enforcement.md) · [agentic orchestration](docs/adr/0007-agentic-orchestration.md) · [layered guardrails](docs/adr/0008-layered-guardrails.md) · [runtime settings + provider gateway](docs/adr/0009-runtime-settings-and-provider-gateway.md) · [demo identity + mutation gating](docs/adr/0010-demo-identity-and-mutation-gating.md)
 
 ## License
 
