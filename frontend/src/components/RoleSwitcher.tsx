@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { IconLock } from "@/components/icons";
+
 const ROLES = [
-  { value: "admin", label: "Admin", hint: "All documents" },
-  { value: "analyst", label: "Analyst", hint: "Public + internal" },
-  { value: "viewer", label: "Viewer", hint: "Public only" },
+  { value: "viewer", label: "Viewer", hint: "Public documents only", tiers: 1 },
+  { value: "analyst", label: "Analyst", hint: "Public and internal", tiers: 2 },
+  { value: "admin", label: "Admin", hint: "Every tier, including restricted", tiers: 3 },
 ];
 
 function readRole(): string {
@@ -38,14 +40,19 @@ export default function RoleSwitcher() {
   const current = ROLES.find((r) => r.value === role) ?? ROLES[0];
 
   return (
-    <div className="rounded-lg border border-black/10 bg-white/60 p-2.5 dark:border-white/10 dark:bg-white/[0.03]">
-      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-black/40 dark:text-white/40">
+    <div className="rounded-xl border border-line bg-sunken p-2.5">
+      <label
+        htmlFor="role-switcher"
+        className="eyebrow mb-1.5 flex items-center gap-1.5 text-[0.625rem]"
+      >
+        <IconLock size={11} />
         Viewing as
       </label>
       <select
+        id="role-switcher"
         value={role}
         onChange={(e) => change(e.target.value)}
-        className="w-full rounded-md border border-black/15 bg-transparent px-2 py-1.5 text-sm font-medium outline-none focus:border-blue-500 dark:border-white/20 dark:focus:border-blue-400"
+        className="field font-medium"
       >
         {ROLES.map((r) => (
           <option key={r.value} value={r.value}>
@@ -53,7 +60,20 @@ export default function RoleSwitcher() {
           </option>
         ))}
       </select>
-      <p className="mt-1 text-[10px] text-black/40 dark:text-white/40">{current.hint}</p>
+      {/* Clearance shown as filled segments: the reach of the role is visible
+          without reading the sentence under it. */}
+      <div className="mt-2 flex gap-1" aria-hidden="true">
+        {[1, 2, 3].map((tier) => (
+          <span
+            key={tier}
+            className={`h-1 flex-1 rounded-full ${
+              tier <= current.tiers ? "bg-accent" : "bg-line-strong"
+            }`}
+            style={{ transition: "background-color var(--dur) var(--ease-out)" }}
+          />
+        ))}
+      </div>
+      <p className="mt-1.5 text-[0.6875rem] leading-snug text-faint">{current.hint}</p>
     </div>
   );
 }
