@@ -2,7 +2,7 @@
 
 # 🛡️ Enterprise Agentic RAG
 
-**A context-aware, multi-agent RAG platform with document-level RBAC, layered guardrails, and a locally fine-tuned Gemma 4 - designed to run securely on a laptop and demo cheaply in the cloud.**
+**A context-aware, multi-agent RAG platform with document-level RBAC enforced by Postgres Row-Level Security, layered guardrails, and a local Gemma 4 served by Ollama. It runs on a laptop; a smaller hosted demo runs on Vercel.**
 
 [![CI](https://github.com/Siroxou/advanced-rag/actions/workflows/ci.yml/badge.svg)](../../actions)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -17,19 +17,19 @@
 
 Most RAG demos answer questions over a pile of PDFs. Enterprises can't ship that, because retrieval **leaks data**: anyone who can ask a question can extract any document the index can see. This project treats RAG as a production system:
 
-- 🔐 **RBAC where it actually matters - retrieval.** Document access is enforced by **Postgres Row-Level Security**, so the database physically cannot return a chunk the caller isn't cleared for - even if the application query is buggy. This kills the #1 enterprise RAG risk: exfiltration.
+- 🔐 **RBAC where it actually matters - retrieval.** Document access is enforced by **Postgres Row-Level Security**, so the database physically cannot return a chunk the caller isn't cleared for - even if the application query is buggy.
 - 🤖 **Multi-agent & context-aware.** A LangGraph supervisor routes each query through context-rewrite → retrieval / live web → grounded synthesis, with conversation memory.
-- 🧯 **Layered guardrails.** ShieldGemma input/output safety, prompt-injection checks, and a grounding/citation validator that refuses rather than hallucinates.
-- 🦾 **Local, open model + LoRA.** Gemma 4 runs on-device via Ollama/MLX (Apple Metal); a LoRA adapter teaches it strict citation format and faithful refusals. No proprietary API required.
-- 🚀 **Two profiles, one codebase.** Runs **fully local & air-gappable** on a MacBook, and deploys as a **cheap, scale-to-zero cloud demo** - switched by env vars.
+- 🧯 **Layered guardrails.** Prompt-injection blocking on input, a citation check that flags any `[n]` pointing at a source that was not retrieved, PII detection or masking on output, and an optional input safety-classifier hook (off unless `GUARDRAILS_SAFETY_MODEL` is set).
+- 🦾 **Local, open model.** Gemma 4 runs on-device via Ollama (Apple Metal). A LoRA fine-tuning scaffold (dataset generator, MLX config, eval harness) lives in [`ml/`](ml/); no adapter has been trained yet. No proprietary API required.
+- 🚀 **Two profiles.** The full stack runs locally on a MacBook, with no cloud calls at query time once the models are downloaded. The hosted demo is a separate, smaller Next.js implementation; see [Runtime profiles](#runtime-profiles).
 
 ## Architecture
 
 ```mermaid
 flowchart TB
-  U[User / Browser] --> FE[Next.js Frontend<br/>chat · admin/RBAC · dashboard]
+  U[User / Browser] --> FE[Next.js Frontend<br/>chat · admin/RBAC · metrics]
   FE -->|SSE stream · JWT for writes| API[FastAPI Gateway<br/>auth · authz · rate-limit · audit]
-  API --> GIN[Input Guardrails<br/>ShieldGemma · injection check]
+  API --> GIN[Input Guardrails<br/>injection check · optional safety model]
   GIN --> ORCH[LangGraph Supervisor]
   ORCH --> QUA[Context/Query agent<br/>rewrite · route]
   ORCH --> RAG[Retrieval agent]
@@ -38,35 +38,35 @@ flowchart TB
   RAG -->|RBAC-filtered hybrid search + rerank| PG[(Postgres + pgvector<br/>Row-Level Security<br/>chunks · ACLs · users · audit)]
   WEB --> TAV[Tavily]
   SYN --> LLM[[Gemma 4 - Inference Abstraction]]
-  SYN --> GOUT[Output Guardrails<br/>safety · grounding · citations]
+  SYN --> GOUT[Output Guardrails<br/>citation check · PII scan / mask]
   GOUT --> API
-  LLM -.local.-> OLL[Ollama / MLX-LM - Mac Metal]
+  LLM -.local.-> OLL[Ollama - Mac Metal]
   LLM -.cloud.-> MOD[vLLM on Modal - serverless GPU]
-  API --> LF[LangFuse tracing]
+  API -.optional.-> LF[LangFuse tracing]
   API --> PG
 ```
 
 ## Runtime profiles
 
-The system described above is the **full stack**. The hosted demo is a deliberately
-smaller thing, so the link stays free and instant, and this table says exactly which
+The system described above is the **full stack**. The [hosted demo](https://www.rag.syncsolutions.ai) is a deliberately
+smaller thing, so it stays free and instant, and this table says exactly which
 is which rather than letting the diagram imply the demo does more than it does.
 
-| Aspect | Full stack (local, or self-hosted) | Hosted demo (Vercel) |
+| Aspect | Full stack (local, or self-hosted) | [Hosted demo](https://www.rag.syncsolutions.ai) (Vercel) |
 |---|---|---|
-| Model | Gemma 4 via Ollama / MLX-LM (Metal), or any OpenAI-compatible endpoint | OpenRouter (`anthropic/claude-haiku-4.5`) |
+| Model | Gemma 4 via Ollama (Metal), or any OpenAI-compatible endpoint | Your own key for one of 11 OpenAI-compatible providers (default OpenRouter, `anthropic/claude-haiku-4.5`); with no key it retrieves and cites but writes no answer |
 | Retrieval | Hybrid dense + sparse over pgvector, RRF fused, cross-encoder rerank | Term-overlap scoring over a curated in-repo corpus |
 | RBAC | **Enforced by Postgres Row-Level Security** | Simulated in TypeScript over the same role tiers |
 | Storage | Postgres + pgvector (documents, chunks, users, audit) | None - cookies hold the session |
-| Web search | Tavily when a key is set | Off |
+| Web search | Tavily when a key is set, for analyst and admin | Off |
 | Runs with | `make api` / `make web` | Next.js route handlers on Vercel |
-| Cost | $0, air-gappable | ~$0 |
+| Cost | $0 with a local model, offline once models are downloaded | ~$0 (visitors bring their own key) |
 
 The demo exists to make the *behaviour* clickable - switch role, watch the answer
 change, try an injection and see it blocked. The security guarantee it illustrates
-is only real in the full stack, where the database refuses the rows. Deploying the
-full stack (vLLM on Modal, Neon/Supabase for Postgres) is what
-[`infra/`](infra/) is for.
+is only real in the full stack, where the database refuses the rows. The artifacts for
+deploying the full stack (a Helm chart, Terraform, a Modal app) live in [`infra/`](infra/);
+none of them is deployed.
 
 ## Quickstart (local)
 
@@ -116,14 +116,15 @@ high-confidence PII (SSNs, card numbers) lands a file in the most restrictive
 tier (admin-only) rather than the most open one, so a misjudgement never leaks.
 It is a convenience, not the security boundary (RLS is); `make classify` is the
 human-review step, and the tier, rationale, and an `auto_classified` flag are
-stored on each document row for audit. Explicit `--roles` still overrides.
+stored on each document row for audit. Without `--classify`, `--roles` sets the tier by
+hand as before; with it, `--roles` is ignored.
 
 **No PDFs of your own? Use a built-in corpus preset.** Ready-made public
 datasets, ingested through the same chunk -> embed -> RLS-tagged pipeline:
 
 ```bash
 make presets                 # list the presets
-make preset NAME=fred-core   # 32 mixed-domain PDFs (ECB, OECD, arXiv AI)
+make preset NAME=fred-core   # mixed-domain PDFs (ECB, OECD, arXiv AI)
 make preset NAME=patient-doctor LIMIT=100   # medical conversations, clinician-only
 ```
 
@@ -163,14 +164,14 @@ against, an `admin`-only chunk:
 
 ```bash
 cd backend
-uv run python -m app.ingestion.cli --input data/raw/public.pdf     --source-id demo --roles viewer,analyst,admin --sensitivity public
-uv run python -m app.ingestion.cli --input data/raw/restricted.pdf --source-id demo --roles admin                --sensitivity restricted
+uv run python -m app.ingestion.cli --input data/raw/public_overview.pdf    --source-id demo --roles viewer,analyst,admin --sensitivity public
+uv run python -m app.ingestion.cli --input data/raw/restricted_finance.pdf --source-id demo --roles admin                --sensitivity restricted
 # switch to viewer, ask about the restricted doc → "I don't have enough information ..."  (no leak)
 # switch to admin,  ask the same question        → grounded answer with a [n] citation
 ```
 
-The guarantee is enforced by the database, not the app: a raw `SELECT * FROM chunks` with no
-WHERE clause returns only the rows the caller's roles permit, which is exactly what
+The guarantee is enforced by the database, not the app: a query on `chunks` with no role
+filter returns only the rows the caller's roles permit, which is exactly what
 [`backend/tests/test_rls.py`](backend/tests/test_rls.py) asserts in CI - including a check
 that the app role cannot bypass RLS, since a superuser would silently make the whole policy
 a no-op. Retrieval itself is hybrid (dense pgvector + sparse full-text, fused with RRF) then
@@ -195,11 +196,12 @@ drop-in points, not dependencies. See [ADR-0008](docs/adr/0008-layered-guardrail
 changes the running system with no restart, backed by a small `app_settings` table that
 overlays the env defaults and hot-reloads on save:
 
-- **Swap models / bring your own key.** The hosted demo routes through **OpenRouter** (one
-  OpenAI-compatible gateway fronting Anthropic, OpenAI, Google and more), so any model is a
-  string away - the dropdown is populated live, with a "Test connection" probe. The shared
-  demo key is rate limited; paste your own OpenRouter key to lift the cap. Keys are never
-  returned by the API (only `using_demo_key` / `*_key_set` booleans).
+- **Swap models / bring your own key.** Pick any of 11 OpenAI-compatible providers
+  (OpenRouter by default, one gateway fronting Anthropic, OpenAI, Google and more) and any
+  model - the dropdown is populated live, with a "Test connection" probe. In the full stack a
+  shared `OPENROUTER_API_KEY` is rate limited, and saving your own key lifts the cap. The
+  hosted demo has no shared key: each visitor brings their own, held in an httpOnly cookie.
+  Keys are never returned by the API (only `using_demo_key` / `*_key_set` booleans).
 - **Toggle the guardrails.** Injection blocking, citation grounding, PII detection, and the
   safety classifier each flip independently under a master switch; **PII masking** redacts
   emails / SSNs / cards in the answer (`[REDACTED_*]`) instead of only flagging them.
@@ -214,22 +216,22 @@ the next query (a `viewer` immediately stops retrieving a now-restricted doc). S
 ## Repository layout
 
 ```
-backend/    FastAPI · LangGraph agents · retrieval · guardrails · RBAC   (Python 3.12, uv)
-frontend/   Next.js chat + admin/RBAC + dashboard                        (TS, pnpm)
-ml/         LoRA fine-tuning · datasets · RAGAS eval · model cards
-infra/      docker-compose · Helm chart · Terraform  (IaC as artifacts)
+backend/    FastAPI · LangGraph agents · retrieval · guardrails · RBAC · eval   (Python 3.12, uv)
+frontend/   Next.js chat + admin/RBAC + metrics                                (TS, pnpm)
+ml/         LoRA config (MLX) · model card template · golden eval set
+infra/      Helm chart · Terraform · Modal app · Postgres init SQL  (IaC as artifacts)
 docs/       architecture · ADRs · threat model · runbook
 ```
 
 ## Roadmap
 
-- [x] **Phase 0** - Scaffold, inference abstraction (Gemma 4 verified), CI, docs
+- [x] **Phase 0** - Scaffold, inference abstraction (Gemma 4 via Ollama by default), CI, docs
 - [x] **Phase 1** - Core RAG: ingestion → pgvector → hybrid retrieval + rerank → grounded, cited chat
 - [x] **Phase 2** - RBAC via Postgres RLS: JWT auth, roles enforced in-database, append-only audit log
 - [x] **Phase 3** - LangGraph agents: context-rewrite + retrieval + permission-gated web search
 - [x] **Phase 4** - Layered guardrails: injection blocking, grounding/citation validation, PII scan
 - [x] **Phase 5** - LoRA fine-tune **scaffold**: dataset generator, MLX config, eval harness, model card. The training run itself is hours of local GPU time and is not done; the model card's metrics are marked TBD rather than invented.
-- [x] **Phase 6** - Helm + Terraform + Modal artifacts, CI eval gate, LangFuse hook - all committed and CI-validated. Deliberately not applied to a live cluster (see [ADR-0004](docs/adr/0004-iac-as-artifact.md)).
+- [x] **Phase 6** - Helm + Terraform + Modal artifacts (helm and terraform are checked in CI; the Modal app is not), a nightly citation-accuracy eval workflow on a committed golden set, a cost/latency metrics page, and optional LangFuse tracing. Deliberately not applied to a live cluster (see [ADR-0004](docs/adr/0004-iac-as-artifact.md)).
 - [x] **Phase 7** - Runtime config + operator controls: live model/provider switching (OpenRouter), bring-your-own key, per-guardrail toggles, PII masking, rate limiting, and in-place document re-tiering
 
 ## Documentation

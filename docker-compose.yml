@@ -1,8 +1,7 @@
 name: advanced-rag
 
 # Lean local infra. Gemma 4 runs on the host via Ollama (Apple Metal), NOT in a
-# container - Docker on macOS has no GPU passthrough. LangFuse uses the free cloud
-# tier (set keys in .env); self-hosting it is documented in docs/runbook.md.
+# container - Docker on macOS has no GPU passthrough.
 services:
   db:
     image: pgvector/pgvector:pg16

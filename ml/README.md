@@ -1,14 +1,15 @@
 # ml/ - LoRA fine-tuning and evaluation
 
-Specializes Gemma 4 E4B for grounded, cited answering. The data and evaluation
-code live in the backend (they reuse the corpus, DB, and LLM); this directory
-holds the MLX training config, the produced adapters, and the model card.
+Scaffold for specializing Gemma 4 E4B for grounded, cited answering. No adapter
+has been trained yet. The data and evaluation code live in the backend (they reuse
+the corpus, DB, and LLM); this directory holds the MLX training config, the model
+card template, and the committed golden eval set.
 
 ```
 finetune/     MLX-LM LoRA config (lora.yaml)
-datasets/     generated train.jsonl + valid.jsonl   (gitignored)
+datasets/     golden.jsonl (committed eval set); generated train/valid splits are gitignored
 adapters/     trained / merged adapters             (gitignored)
-model_cards/  the published adapter's model card
+model_cards/  model card template (metrics TBD until a training run)
 ```
 
 ## Pipeline

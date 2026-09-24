@@ -36,7 +36,6 @@ Measured by `app.finetune.evaluate` over a held-out split (base vs adapter):
 | --- | --- | --- |
 | Valid-citation rate | _tbd_ | _tbd_ |
 | Correct refusals | _tbd_ | _tbd_ |
-| RAGAS faithfulness | _tbd_ | _tbd_ |
 
 ## Limitations and ethics
 
