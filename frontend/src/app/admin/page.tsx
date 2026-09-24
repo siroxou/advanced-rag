@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/PageHeader";
 import { IconAlert, IconCheck, IconLock } from "@/components/icons";
-import { API_BASE, IS_HOSTED_DEMO, type AdminUser } from "@/lib/api";
+import { API_BASE, demoHeaders, IS_HOSTED_DEMO, useIsAdmin, type AdminUser } from "@/lib/api";
 
 const ROLE_BADGE: Record<string, string> = {
   admin: "badge-danger",
@@ -19,7 +19,11 @@ const ROLE_REACH: Record<string, string> = {
   viewer: "Public documents only",
 };
 
+// Seeded roles are cumulative (admin also holds viewer), so describe the highest.
+const highestRole = (roles: string[]) => ["admin", "analyst", "viewer"].find((r) => roles.includes(r));
+
 export default function PeoplePage() {
+  const isAdmin = useIsAdmin();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -31,15 +35,20 @@ export default function PeoplePage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const fetchUsers = useCallback(async () => {
+    // The full stack lists accounts only for a signed admin; don't ask for a 401.
+    if (!IS_HOSTED_DEMO && !isAdmin) {
+      setLoading(false);
+      return;
+    }
     try {
-      const res = await fetch(`${API_BASE}/api/admin/users`);
+      const res = await fetch(`${API_BASE}/api/admin/users`, { headers: demoHeaders() });
       if (res.ok) setUsers(await res.json());
     } catch (e) {
       console.error("Failed to fetch users:", e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async on-mount fetch; state lands post-await
@@ -54,7 +63,7 @@ export default function PeoplePage() {
     try {
       const res = await fetch(`${API_BASE}/api/admin/users`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...demoHeaders() },
         body: JSON.stringify({ username, password, roles }),
       });
       if (res.ok) {
@@ -81,7 +90,8 @@ export default function PeoplePage() {
           title="People"
           subtitle="Accounts and the roles they carry. A role is the only thing that decides which documents retrieval will return."
           actions={
-            !IS_HOSTED_DEMO && (
+            !IS_HOSTED_DEMO &&
+            isAdmin && (
               <button
                 onClick={() => setShowCreate((s) => !s)}
                 aria-expanded={showCreate}
@@ -99,6 +109,13 @@ export default function PeoplePage() {
             These three accounts are fixed in the hosted demo. Use the role switcher in the
             sidebar to browse as any of them; creating accounts needs the auth backend from the
             full stack.
+          </p>
+        )}
+
+        {!IS_HOSTED_DEMO && !isAdmin && (
+          <p className="mt-5 flex items-start gap-2 rounded-xl border border-line bg-surface-2 px-4 py-3 text-sm leading-relaxed text-muted">
+            <IconLock size={15} className="mt-0.5 shrink-0 text-faint" />
+            Sign in as an admin (sidebar) to see and add accounts.
           </p>
         )}
 
@@ -180,7 +197,7 @@ export default function PeoplePage() {
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium">{u.username}</p>
                 <p className="text-xs text-faint">
-                  {ROLE_REACH[u.roles[0]] ?? "Custom role set"}
+                  {ROLE_REACH[highestRole(u.roles) ?? ""] ?? "Custom role set"}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">

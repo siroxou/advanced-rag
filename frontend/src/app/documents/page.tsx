@@ -10,6 +10,7 @@ import {
   API_BASE,
   demoHeaders,
   IS_HOSTED_DEMO,
+  useIsAdmin,
   updateDocument,
   type DocumentInfo,
 } from "@/lib/api";
@@ -27,6 +28,7 @@ const TIER_ROLES: Record<string, string> = {
 const TIERS = ["all", "public", "internal", "confidential", "restricted"];
 
 export default function DocumentsPage() {
+  const isAdmin = useIsAdmin();
   const [documents, setDocuments] = useState<DocumentInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -92,6 +94,8 @@ export default function DocumentsPage() {
     try {
       const res = await fetch(`${API_BASE}/api/documents/upload`, {
         method: "POST",
+        // No Content-Type: the browser sets the multipart boundary itself.
+        headers: demoHeaders(),
         body: formData,
       });
       if (res.ok) fetchDocuments();
@@ -237,9 +241,12 @@ export default function DocumentsPage() {
                   <span className={`badge ${sensitivityClass(doc.sensitivity)}`}>
                     {doc.sensitivity}
                   </span>
-                  <button onClick={() => startEdit(doc)} className="btn btn-ghost btn-sm">
-                    Re-tier
-                  </button>
+                  {/* The hosted demo re-tiers in a cookie; the full stack needs an admin token. */}
+                  {(IS_HOSTED_DEMO || isAdmin) && (
+                    <button onClick={() => startEdit(doc)} className="btn btn-ghost btn-sm">
+                      Re-tier
+                    </button>
+                  )}
                 </div>
               </div>
             )
@@ -260,10 +267,15 @@ export default function DocumentsPage() {
               which the hosted demo does not run. Clone the repo and start the FastAPI stack to
               ingest your own PDFs; everything else here works against the bundled corpus.
             </p>
+          ) : !isAdmin ? (
+            <p className="mt-2 flex items-start gap-2 text-sm leading-relaxed text-muted">
+              <IconLock size={15} className="mt-0.5 shrink-0 text-faint" />
+              Sign in as an admin (sidebar) to upload PDFs or re-tier documents.
+            </p>
           ) : (
             <>
               <p className="mt-1 text-sm text-muted">
-                PDF only. The classifier assigns an access tier, which you can override above.
+                PDF only. Uploads are stored as internal (analyst and admin); re-tier them above.
               </p>
               <label className="mt-3 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-line-strong px-8 py-10 transition-colors hover:border-accent">
                 <input

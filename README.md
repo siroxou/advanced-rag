@@ -151,7 +151,9 @@ do not support an answer.
 proves nothing. Reads run as a demo identity whose roles come from the role switcher, so
 you can watch access control change in real time. That identity is never *authenticated*,
 so it can never write - upload, re-classify, delete, user management, and settings all
-require a signed token carrying `admin`, and return 401 without one. Set
+require a signed token carrying `admin`, and return 401 without one. In the local
+console, use **Sign in** under the role switcher (`make seed` creates `admin`, password
+`demo`); until then those controls are hidden or disabled. Set
 `AUTH_REQUIRED=true` to demand a JWT on every request instead. See
 [ADR-0010](docs/adr/0010-demo-identity-and-mutation-gating.md).
 

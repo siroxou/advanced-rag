@@ -9,9 +9,11 @@ import { IconAlert, IconCheck, IconLock } from "@/components/icons";
 import { PROVIDERS, getProvider } from "@/lib/demo/providers";
 import {
   getSettings,
+  IS_HOSTED_DEMO,
   listModels,
   testLlm,
   updateSettings,
+  useIsAdmin,
   type RuntimeSettings,
   type SettingsPatch,
 } from "@/lib/api";
@@ -37,6 +39,8 @@ function Section({
 }
 
 export default function SettingsPage() {
+  // The hosted demo saves to a cookie; the full stack needs a signed admin token.
+  const canWrite = useIsAdmin() || IS_HOSTED_DEMO;
   const [settings, setSettings] = useState<RuntimeSettings | null>(null);
   const [models, setModels] = useState<string[]>([]);
   const [apiKeyInput, setApiKeyInput] = useState("");
@@ -151,11 +155,18 @@ export default function SettingsPage() {
           title="Settings"
           subtitle="Switch the model behind the assistant, bring your own key, and tune the guardrails. Changes apply to the next question, with no redeploy."
           actions={
-            <button onClick={saveAll} disabled={saving} className="btn btn-primary">
+            <button onClick={saveAll} disabled={saving || !canWrite} className="btn btn-primary">
               {saving ? "Saving..." : "Save changes"}
             </button>
           }
         />
+
+        {!canWrite && (
+          <p className="mt-4 flex items-start gap-2 rounded-xl border border-line bg-surface-2 px-4 py-2.5 text-sm text-muted">
+            <IconLock size={15} className="mt-0.5 shrink-0 text-faint" />
+            Sign in as an admin (sidebar) to change these settings.
+          </p>
+        )}
 
         {savedAt && (
           <p className="mt-4 flex items-center gap-2 rounded-xl border border-ok-line bg-ok-soft px-4 py-2.5 text-sm text-ok">
@@ -168,280 +179,287 @@ export default function SettingsPage() {
           </p>
         )}
 
-        {/* Key first: nothing else here matters until the assistant can reach a model. */}
-        <Section
-          title="Your API key"
-          description={`The assistant runs on your own key, so nobody else spends it. It is stored in an httpOnly cookie in your browser, never readable by this page, and sent only to ${providerName}.`}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="flex items-center gap-2 text-sm font-medium">
-              <IconLock size={15} className="text-faint" />
-              {providerName}
-            </span>
-            <span className={`badge ${needsKey ? "badge-warn" : keySet ? "badge-ok" : "badge-neutral"}`}>
-              {needsKey ? "Key required" : keySet ? "Key set" : "No key needed"}
-            </span>
-          </div>
+        {/* One native switch disables every input, toggle and button below. */}
+        <fieldset disabled={!canWrite} className="min-w-0">
+          {/* Key first: nothing else here matters until the assistant can reach a model. */}
+          <Section
+            title="Your API key"
+            description={
+              IS_HOSTED_DEMO
+                ? `The assistant runs on your own key, so nobody else spends it. It is stored in an httpOnly cookie in your browser, never readable by this page, and sent only to ${providerName}.`
+                : "The assistant runs on this key. It is stored in the backend's settings table, never returned by the API, and sent to whichever provider is selected."
+            }
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="flex items-center gap-2 text-sm font-medium">
+                <IconLock size={15} className="text-faint" />
+                {providerName}
+              </span>
+              <span className={`badge ${needsKey ? "badge-warn" : keySet ? "badge-ok" : "badge-neutral"}`}>
+                {needsKey ? "Key required" : keySet ? "Key set" : "No key needed"}
+              </span>
+            </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            <input
-              type="password"
-              value={apiKeyInput}
-              onChange={(e) => setApiKeyInput(e.target.value)}
-              placeholder={provider?.keyPlaceholder ?? "your API key"}
-              aria-label={`${providerName} API key`}
-              className="field min-w-56 flex-1"
-            />
-            <button
-              onClick={() => {
-                apply({ api_key: apiKeyInput }, "Key saved");
-                setApiKeyInput("");
-              }}
-              disabled={saving || !apiKeyInput.trim()}
-              className="btn btn-primary"
-            >
-              Save key
-            </button>
-            {keySet && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <input
+                type="password"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                placeholder={provider?.keyPlaceholder ?? "your API key"}
+                aria-label={`${providerName} API key`}
+                className="field min-w-56 flex-1"
+              />
               <button
-                onClick={() => apply({ api_key: "" }, "Key removed")}
-                disabled={saving}
-                className="btn btn-secondary"
-              >
-                Remove
-              </button>
-            )}
-          </div>
-
-          {provider?.keyUrl && (
-            <a
-              href={provider.keyUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-block text-xs font-medium text-accent hover:underline"
-            >
-              Get a {providerName} key
-            </a>
-          )}
-        </Section>
-
-        <Section
-          title="Model"
-          description="Every provider here speaks the OpenAI chat-completions format, so switching is a base URL and a model id."
-        >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="label" htmlFor="provider">
-                Provider
-              </label>
-              <select
-                id="provider"
-                value={llm.provider}
-                onChange={(e) => {
-                  // Carry the provider's own endpoint and default model across, so
-                  // switching never leaves you pointed at the previous one.
-                  const next = getProvider(e.target.value);
-                  patch((s) => ({
-                    ...s,
-                    llm: {
-                      ...s.llm,
-                      provider: e.target.value,
-                      base_url: next?.baseUrl ?? s.llm.base_url,
-                      model: next?.defaultModel ?? s.llm.model,
-                    },
-                  }));
+                onClick={() => {
+                  apply({ api_key: apiKeyInput }, "Key saved");
+                  setApiKeyInput("");
                 }}
-                className="field"
+                disabled={saving || !apiKeyInput.trim()}
+                className="btn btn-primary"
               >
-                {PROVIDERS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
+                Save key
+              </button>
+              {keySet && (
+                <button
+                  onClick={() => apply({ api_key: "" }, "Key removed")}
+                  disabled={saving}
+                  className="btn btn-secondary"
+                >
+                  Remove
+                </button>
+              )}
             </div>
-            <div>
-              <label className="label" htmlFor="model">
-                Model
+
+            {provider?.keyUrl && (
+              <a
+                href={provider.keyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 inline-block text-xs font-medium text-accent hover:underline"
+              >
+                Get a {providerName} key
+              </a>
+            )}
+          </Section>
+
+          <Section
+            title="Model"
+            description="Every provider here speaks the OpenAI chat-completions format, so switching is a base URL and a model id."
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label" htmlFor="provider">
+                  Provider
+                </label>
+                <select
+                  id="provider"
+                  value={llm.provider}
+                  onChange={(e) => {
+                    // Carry the provider's own endpoint and default model across, so
+                    // switching never leaves you pointed at the previous one.
+                    const next = getProvider(e.target.value);
+                    patch((s) => ({
+                      ...s,
+                      llm: {
+                        ...s.llm,
+                        provider: e.target.value,
+                        base_url: next?.baseUrl ?? s.llm.base_url,
+                        model: next?.defaultModel ?? s.llm.model,
+                      },
+                    }));
+                  }}
+                  className="field"
+                >
+                  {PROVIDERS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label" htmlFor="model">
+                  Model
+                </label>
+                <input
+                  id="model"
+                  list="model-options"
+                  value={llm.model}
+                  onChange={(e) => patch((s) => ({ ...s, llm: { ...s.llm, model: e.target.value } }))}
+                  placeholder="anthropic/claude-sonnet-4.5"
+                  className="field"
+                />
+                <datalist id="model-options">
+                  {(models.length ? models : (provider?.models ?? [])).map((m) => (
+                    <option key={m} value={m} />
+                  ))}
+                </datalist>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <label className="label" htmlFor="base-url">
+                Base URL
               </label>
               <input
-                id="model"
-                list="model-options"
-                value={llm.model}
-                onChange={(e) => patch((s) => ({ ...s, llm: { ...s.llm, model: e.target.value } }))}
-                placeholder="anthropic/claude-sonnet-4.5"
-                className="field"
+                id="base-url"
+                value={llm.base_url}
+                onChange={(e) => patch((s) => ({ ...s, llm: { ...s.llm, base_url: e.target.value } }))}
+                className="field font-mono text-xs"
               />
-              <datalist id="model-options">
-                {(models.length ? models : (provider?.models ?? [])).map((m) => (
-                  <option key={m} value={m} />
-                ))}
-              </datalist>
             </div>
-          </div>
 
-          <div className="mt-4">
-            <label className="label" htmlFor="base-url">
-              Base URL
-            </label>
-            <input
-              id="base-url"
-              value={llm.base_url}
-              onChange={(e) => patch((s) => ({ ...s, llm: { ...s.llm, base_url: e.target.value } }))}
-              className="field font-mono text-xs"
-            />
-          </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label" htmlFor="temperature">
+                  Temperature
+                  <span className="ml-1 font-mono tabular-nums text-faint">
+                    {gen.temperature.toFixed(2)}
+                  </span>
+                </label>
+                <input
+                  id="temperature"
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={gen.temperature}
+                  onChange={(e) =>
+                    patch((s) => ({ ...s, gen: { ...s.gen, temperature: Number(e.target.value) } }))
+                  }
+                  className="w-full accent-[var(--accent)]"
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="max-tokens">
+                  Max tokens
+                </label>
+                <input
+                  id="max-tokens"
+                  type="number"
+                  min={1}
+                  max={8192}
+                  value={gen.max_tokens}
+                  onChange={(e) =>
+                    patch((s) => ({ ...s, gen: { ...s.gen, max_tokens: Number(e.target.value) } }))
+                  }
+                  className="field"
+                />
+              </div>
+            </div>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="label" htmlFor="temperature">
-                Temperature
-                <span className="ml-1 font-mono tabular-nums text-faint">
-                  {gen.temperature.toFixed(2)}
+            <div className="mt-2 divide-y divide-[var(--line)]">
+              <Toggle
+                checked={llm.enable_thinking}
+                onChange={(v) => patch((s) => ({ ...s, llm: { ...s.llm, enable_thinking: v } }))}
+                label="Reasoning"
+                description="Let reasoning models think before answering. Slower, and only meaningful on models that support it."
+              />
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button onClick={runTest} disabled={testing} className="btn btn-secondary btn-sm">
+                {testing ? "Testing..." : "Test connection"}
+              </button>
+              {testResult && (
+                <span
+                  className={`flex items-center gap-1.5 text-sm ${testResult.ok ? "text-ok" : "text-danger"}`}
+                >
+                  {testResult.ok ? <IconCheck size={14} /> : <IconAlert size={14} />}
+                  {testResult.model} - {testResult.detail}
                 </span>
-              </label>
-              <input
-                id="temperature"
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={gen.temperature}
-                onChange={(e) =>
-                  patch((s) => ({ ...s, gen: { ...s.gen, temperature: Number(e.target.value) } }))
-                }
-                className="w-full accent-[var(--accent)]"
+              )}
+            </div>
+          </Section>
+
+          <Section
+            title="Guardrails"
+            description="Input guardrails run before retrieval, output guardrails after generation. The first switch gates every other one."
+          >
+            <div className="divide-y divide-[var(--line)]">
+              <Toggle
+                checked={guardrails.enabled}
+                onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, enabled: v } }))}
+                label="Guardrails enabled"
+                description="Master switch for every input and output check below."
+              />
+              <Toggle
+                checked={guardrails.injection}
+                onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, injection: v } }))}
+                label="Prompt-injection blocking"
+                description="Refuse known jailbreak and instruction-override patterns before retrieval runs."
+                disabled={!guardrails.enabled}
+              />
+              <Toggle
+                checked={guardrails.grounding}
+                onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, grounding: v } }))}
+                label="Citation grounding check"
+                description="Flag answers that cite a source outside the set that was actually retrieved."
+                disabled={!guardrails.enabled}
+              />
+              <Toggle
+                checked={guardrails.pii_detect}
+                onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, pii_detect: v } }))}
+                label="PII detection"
+                description="Flag emails, phone numbers, national IDs and card numbers in the answer."
+                disabled={!guardrails.enabled || guardrails.pii_mask}
+              />
+              <Toggle
+                checked={guardrails.pii_mask}
+                onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, pii_mask: v } }))}
+                label="PII masking"
+                description="Replace detected PII with [REDACTED_*] placeholders. Implies detection."
+                disabled={!guardrails.enabled}
+              />
+              <Toggle
+                checked={guardrails.safety}
+                onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, safety: v } }))}
+                label="Safety classifier"
+                description="Run an optional ShieldGemma-style safety model over the input."
+                disabled={!guardrails.enabled}
               />
             </div>
-            <div>
-              <label className="label" htmlFor="max-tokens">
-                Max tokens
+          </Section>
+
+          <Section
+            title="Rate limit"
+            description="A ceiling on questions per minute. Skipped entirely when the request runs on your own key."
+          >
+            <div className="divide-y divide-[var(--line)]">
+              <Toggle
+                checked={ratelimit.enabled}
+                onChange={(v) => patch((s) => ({ ...s, ratelimit: { ...s.ratelimit, enabled: v } }))}
+                label="Rate limiting enabled"
+              />
+            </div>
+            <div className="mt-3 max-w-40">
+              <label className="label" htmlFor="rpm">
+                Requests per minute
               </label>
               <input
-                id="max-tokens"
+                id="rpm"
                 type="number"
                 min={1}
-                max={8192}
-                value={gen.max_tokens}
+                max={120}
+                value={ratelimit.per_minute}
                 onChange={(e) =>
-                  patch((s) => ({ ...s, gen: { ...s.gen, max_tokens: Number(e.target.value) } }))
+                  patch((s) => ({
+                    ...s,
+                    ratelimit: { ...s.ratelimit, per_minute: Number(e.target.value) },
+                  }))
                 }
                 className="field"
+                disabled={!ratelimit.enabled}
               />
             </div>
-          </div>
+          </Section>
 
-          <div className="mt-2 divide-y divide-[var(--line)]">
-            <Toggle
-              checked={llm.enable_thinking}
-              onChange={(v) => patch((s) => ({ ...s, llm: { ...s.llm, enable_thinking: v } }))}
-              label="Reasoning"
-              description="Let reasoning models think before answering. Slower, and only meaningful on models that support it."
-            />
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button onClick={runTest} disabled={testing} className="btn btn-secondary btn-sm">
-              {testing ? "Testing..." : "Test connection"}
+          <div className="mt-6 mb-4 flex justify-end">
+            <button onClick={saveAll} disabled={saving} className="btn btn-primary">
+              {saving ? "Saving..." : "Save changes"}
             </button>
-            {testResult && (
-              <span
-                className={`flex items-center gap-1.5 text-sm ${testResult.ok ? "text-ok" : "text-danger"}`}
-              >
-                {testResult.ok ? <IconCheck size={14} /> : <IconAlert size={14} />}
-                {testResult.model} - {testResult.detail}
-              </span>
-            )}
           </div>
-        </Section>
-
-        <Section
-          title="Guardrails"
-          description="Input guardrails run before retrieval, output guardrails after generation. The first switch gates every other one."
-        >
-          <div className="divide-y divide-[var(--line)]">
-            <Toggle
-              checked={guardrails.enabled}
-              onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, enabled: v } }))}
-              label="Guardrails enabled"
-              description="Master switch for every input and output check below."
-            />
-            <Toggle
-              checked={guardrails.injection}
-              onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, injection: v } }))}
-              label="Prompt-injection blocking"
-              description="Refuse known jailbreak and instruction-override patterns before retrieval runs."
-              disabled={!guardrails.enabled}
-            />
-            <Toggle
-              checked={guardrails.grounding}
-              onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, grounding: v } }))}
-              label="Citation grounding check"
-              description="Flag answers that cite a source outside the set that was actually retrieved."
-              disabled={!guardrails.enabled}
-            />
-            <Toggle
-              checked={guardrails.pii_detect}
-              onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, pii_detect: v } }))}
-              label="PII detection"
-              description="Flag emails, phone numbers, national IDs and card numbers in the answer."
-              disabled={!guardrails.enabled || guardrails.pii_mask}
-            />
-            <Toggle
-              checked={guardrails.pii_mask}
-              onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, pii_mask: v } }))}
-              label="PII masking"
-              description="Replace detected PII with [REDACTED_*] placeholders. Implies detection."
-              disabled={!guardrails.enabled}
-            />
-            <Toggle
-              checked={guardrails.safety}
-              onChange={(v) => patch((s) => ({ ...s, guardrails: { ...s.guardrails, safety: v } }))}
-              label="Safety classifier"
-              description="Run an optional ShieldGemma-style safety model over the input."
-              disabled={!guardrails.enabled}
-            />
-          </div>
-        </Section>
-
-        <Section
-          title="Rate limit"
-          description="A ceiling on questions per minute. Skipped entirely when the request runs on your own key."
-        >
-          <div className="divide-y divide-[var(--line)]">
-            <Toggle
-              checked={ratelimit.enabled}
-              onChange={(v) => patch((s) => ({ ...s, ratelimit: { ...s.ratelimit, enabled: v } }))}
-              label="Rate limiting enabled"
-            />
-          </div>
-          <div className="mt-3 max-w-40">
-            <label className="label" htmlFor="rpm">
-              Requests per minute
-            </label>
-            <input
-              id="rpm"
-              type="number"
-              min={1}
-              max={120}
-              value={ratelimit.per_minute}
-              onChange={(e) =>
-                patch((s) => ({
-                  ...s,
-                  ratelimit: { ...s.ratelimit, per_minute: Number(e.target.value) },
-                }))
-              }
-              className="field"
-              disabled={!ratelimit.enabled}
-            />
-          </div>
-        </Section>
-
-        <div className="mt-6 mb-4 flex justify-end">
-          <button onClick={saveAll} disabled={saving} className="btn btn-primary">
-            {saving ? "Saving..." : "Save changes"}
-          </button>
-        </div>
+        </fieldset>
       </div>
     </AppShell>
   );

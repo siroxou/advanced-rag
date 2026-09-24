@@ -4,9 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
+import Modal from "@/components/Modal";
 import RoleSwitcher from "@/components/RoleSwitcher";
 import ThemeToggle from "@/components/ThemeToggle";
 import {
+  IconAlert,
   IconChat,
   IconClose,
   IconDocs,
@@ -18,6 +20,7 @@ import {
   IconSparkle,
   IconUsers,
 } from "@/components/icons";
+import { IS_HOSTED_DEMO, login } from "@/lib/api";
 import { project, springTo } from "@/lib/motion";
 
 const NAV = [
@@ -37,6 +40,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [isDesktop, setIsDesktop] = useState(true);
+  const [signingIn, setSigningIn] = useState(false);
 
   const asideRef = useRef<HTMLElement>(null);
   const scrimRef = useRef<HTMLDivElement>(null);
@@ -277,7 +281,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <div className={`px-3 pb-3 ${collapsed ? "lg:hidden" : ""}`}>
-          <RoleSwitcher />
+          <RoleSwitcher
+            onSignIn={() => {
+              setOpen(false);
+              setSigningIn(true);
+            }}
+          />
         </div>
 
         <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3 pb-3">
@@ -363,6 +372,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </button>
       </aside>
 
+      {/* Outside the aside: the drawer goes inert and captures swipes when hidden. */}
+      {!IS_HOSTED_DEMO && <SignInDialog open={signingIn} onClose={() => setSigningIn(false)} />}
+
       <div
         className="lg:pl-[var(--rail)]"
         style={{ transition: "padding-left var(--dur-move) var(--ease-out)" }}
@@ -386,5 +398,71 @@ function Mark() {
         <circle cx="12" cy="12" r="2.4" fill="currentColor" />
       </svg>
     </span>
+  );
+}
+
+function SignInDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    setBusy(true);
+    setError(null);
+    try {
+      await login(String(form.get("username")), String(form.get("password")));
+      // Pages fetch on mount, so reload to refetch everything with the token.
+      location.reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign-in failed");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Sign in">
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <p className="text-sm leading-relaxed text-muted">
+          Reading needs no account. Changing documents, settings or people needs an admin
+          account (<code>make seed</code> creates <strong>admin</strong>, password{" "}
+          <strong>demo</strong>).
+        </p>
+        <div>
+          <label className="label" htmlFor="signin-username">
+            Username
+          </label>
+          <input
+            id="signin-username"
+            name="username"
+            autoComplete="username"
+            required
+            className="field"
+          />
+        </div>
+        <div>
+          <label className="label" htmlFor="signin-password">
+            Password
+          </label>
+          <input
+            id="signin-password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            className="field"
+          />
+        </div>
+        {error && (
+          <p className="flex items-start gap-2 rounded-xl border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger">
+            <IconAlert size={15} className="mt-0.5 shrink-0" />
+            {error}
+          </p>
+        )}
+        <button type="submit" disabled={busy} className="btn btn-primary self-start">
+          {busy ? "Signing in..." : "Sign in"}
+        </button>
+      </form>
+    </Modal>
   );
 }

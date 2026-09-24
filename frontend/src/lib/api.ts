@@ -7,6 +7,8 @@
  * directly rather than through a wrapper that would have to mirror every frame.
  */
 
+import { useSyncExternalStore } from "react";
+
 // Empty default = same-origin: the app talks to its own Next.js route handlers
 // (the self-contained Vercel demo). Point NEXT_PUBLIC_API_URL at the FastAPI
 // backend (e.g. http://localhost:8000) to run against the full local stack.
@@ -20,18 +22,93 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 export const IS_HOSTED_DEMO = API_BASE === "";
 
 /**
- * Forward the role switcher's choice to the FastAPI backend.
+ * Headers every request to the backend carries.
  *
- * The Next.js demo handlers read the `demo_roles` cookie directly, but a request
- * to a separate origin never carries it, so the role switcher would silently do
- * nothing against the real backend. The header is only honoured while auth is
- * off, and it authorizes nothing: the roles are handed to the Postgres RLS
- * policy, which is what actually decides the answer.
+ * Signed in (full stack only), that is the bearer token: writes demand a signed
+ * token carrying `admin`, and the token's roles are what RLS then sees. Signed
+ * out, it is the role switcher's choice. The Next.js demo handlers read the
+ * `demo_roles` cookie directly, but a request to a separate origin never carries
+ * it, so the header forwards it. The backend honours that header only for reads
+ * (the RLS policy and whether the agent may search the web); it never unlocks a
+ * write or anyone else's audit rows.
  */
 export function demoHeaders(): Record<string, string> {
   if (typeof document === "undefined") return {};
+  if (session()) return { Authorization: `Bearer ${readToken()}` };
   const m = document.cookie.match(/(?:^|;\s*)demo_roles=([^;]+)/);
   return m ? { "X-Demo-Roles": decodeURIComponent(m[1]) } : {};
+}
+
+// ── Session (full stack only) ─────────────────────────────────────────────────
+
+const TOKEN_KEY = "rag_token";
+
+export type Session = { sub: string; roles: string[]; exp: number };
+
+function readToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null; // storage blocked (private window, disabled site data)
+  }
+}
+
+/**
+ * The signed-in user, decoded from the stored JWT. Verifying the signature is the
+ * backend's job. Expiry is checked here because the backend answers an expired
+ * token as the demo identity rather than with a 401, so nothing else would notice.
+ */
+export function session(): Session | null {
+  if (IS_HOSTED_DEMO || typeof window === "undefined") return null;
+  const token = readToken();
+  if (!token) return null;
+  try {
+    const claims = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    if (!(claims.exp * 1000 > Date.now())) return null;
+    return { sub: String(claims.sub), roles: claims.roles ?? [], exp: claims.exp };
+  } catch {
+    return null;
+  }
+}
+
+function onStorage(cb: () => void) {
+  window.addEventListener("storage", cb);
+  return () => window.removeEventListener("storage", cb);
+}
+
+/** Render-safe session: null on the server and during hydration, then the token's claims. */
+export function useSession(): Session | null {
+  const token = useSyncExternalStore(
+    onStorage,
+    () => (session() ? readToken() : null),
+    () => null
+  );
+  return token ? session() : null;
+}
+
+/** Every write needs a signed token carrying `admin`; any other role gets a 403. */
+export function useIsAdmin(): boolean {
+  return !!useSession()?.roles.includes("admin");
+}
+
+export async function login(username: string, password: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (res.status === 401) throw new Error("Invalid username or password");
+  if (!res.ok) throw new Error(`Sign-in failed (${res.status})`);
+  const { access_token } = await res.json();
+  localStorage.setItem(TOKEN_KEY, access_token);
+}
+
+export function signOut(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // nothing stored, nothing to clear
+  }
 }
 
 export type Source = {

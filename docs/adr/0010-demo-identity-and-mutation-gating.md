@@ -73,3 +73,14 @@ choice, not a runtime toggle.
 Untouched by this decision, and still true: the `documents` and `users` tables carry
 no RLS policy of their own. `GET /documents` derives its visibility from `chunks`
 instead of duplicating the ACL check, so there is one source of truth for access.
+
+## Follow-up (2026-09-24)
+
+The remark above that no page sends an `Authorization` header is no longer true. The
+full-stack console has a sign-in under the role switcher: the token is kept in
+`localStorage` and sent as a Bearer header, and write controls render only for a token
+carrying `admin` (a signed-in viewer would only collect 403s). While signed in, the token's
+roles replace the switcher's, because a valid JWT always wins in `get_current_user`. The
+hosted demo is unchanged and never sends a token. `localStorage` is readable by any script
+on the page, which is acceptable for a console on localhost; a real deployment should move
+the token to an httpOnly cookie.

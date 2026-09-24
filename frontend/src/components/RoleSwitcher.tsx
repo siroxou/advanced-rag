@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { IconLock } from "@/components/icons";
+import { IS_HOSTED_DEMO, signOut, useSession } from "@/lib/api";
 
 const ROLES = [
   { value: "viewer", label: "Viewer", hint: "Public documents only", tiers: 1 },
@@ -11,19 +12,24 @@ const ROLES = [
   { value: "admin", label: "Admin", hint: "Every tier, including restricted", tiers: 3 },
 ];
 
+// With no cookie the hosted demo grants every role, while FastAPI falls back to
+// its least-privilege demo role, so the switcher must say the same thing.
+const DEFAULT_ROLE = IS_HOSTED_DEMO ? "admin" : "viewer";
+
 function readRole(): string {
-  if (typeof document === "undefined") return "admin";
+  if (typeof document === "undefined") return DEFAULT_ROLE;
   const m = document.cookie.match(/(?:^|;\s*)demo_roles=([^;]+)/);
   const raw = m ? decodeURIComponent(m[1]) : "";
-  // The cookie may hold a single role; default (all roles) presents as Admin.
-  if (raw.includes("admin") || raw === "") return "admin";
+  if (raw === "") return DEFAULT_ROLE;
+  if (raw.includes("admin")) return "admin";
   if (raw.includes("analyst")) return "analyst";
   return "viewer";
 }
 
-export default function RoleSwitcher() {
+export default function RoleSwitcher({ onSignIn }: { onSignIn?: () => void }) {
   const router = useRouter();
-  const [role, setRole] = useState("admin");
+  const me = useSession();
+  const [role, setRole] = useState(DEFAULT_ROLE);
 
   useEffect(() => {
     // Client-only: the role lives in a cookie, read after hydration to avoid a mismatch.
@@ -38,6 +44,30 @@ export default function RoleSwitcher() {
   }
 
   const current = ROLES.find((r) => r.value === role) ?? ROLES[0];
+
+  // A signed token overrides the switcher on the backend, so show whose it is.
+  if (me) {
+    return (
+      <div className="rounded-xl border border-line bg-sunken p-2.5">
+        <p className="eyebrow mb-1.5 flex items-center gap-1.5 text-[0.625rem]">
+          <IconLock size={11} />
+          Signed in
+        </p>
+        <p className="truncate text-sm font-medium">{me.sub}</p>
+        <p className="mt-0.5 text-[0.6875rem] leading-snug text-faint">{me.roles.join(", ")}</p>
+        <button
+          type="button"
+          onClick={() => {
+            signOut();
+            location.reload();
+          }}
+          className="btn btn-ghost btn-sm mt-2 w-full"
+        >
+          Sign out
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-line bg-sunken p-2.5">
@@ -74,6 +104,11 @@ export default function RoleSwitcher() {
         ))}
       </div>
       <p className="mt-1.5 text-[0.6875rem] leading-snug text-faint">{current.hint}</p>
+      {onSignIn && !IS_HOSTED_DEMO && (
+        <button type="button" onClick={onSignIn} className="btn btn-ghost btn-sm mt-2 w-full">
+          Sign in to make changes
+        </button>
+      )}
     </div>
   );
 }

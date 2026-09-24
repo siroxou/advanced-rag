@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/PageHeader";
 import { IconAlert, IconBook, IconCheck, IconLock } from "@/components/icons";
-import { API_BASE, IS_HOSTED_DEMO } from "@/lib/api";
+import { API_BASE, demoHeaders, IS_HOSTED_DEMO, useIsAdmin } from "@/lib/api";
 import { sensitivityClass } from "@/lib/sensitivity";
 
 type PresetInfo = {
@@ -29,6 +29,7 @@ type IngestResult = {
 };
 
 export default function CorpusPage() {
+  const isAdmin = useIsAdmin();
   const [presets, setPresets] = useState<PresetInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [ingesting, setIngesting] = useState<string | null>(null);
@@ -61,7 +62,7 @@ export default function CorpusPage() {
     try {
       const res = await fetch(`${API_BASE}/api/presets/${name}/ingest`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...demoHeaders() },
         body: JSON.stringify({
           limit: limit[name] ? parseInt(limit[name], 10) : -1,
           sensitivity: "",
@@ -154,7 +155,12 @@ export default function CorpusPage() {
 
               {preset.notes && <p className="mt-3 text-xs text-faint">{preset.notes}</p>}
 
-              {!IS_HOSTED_DEMO && (
+              {!IS_HOSTED_DEMO && !isAdmin && (
+                <p className="mt-4 border-t border-line pt-4 text-sm text-muted">
+                  Sign in as an admin (sidebar) to ingest this dataset.
+                </p>
+              )}
+              {!IS_HOSTED_DEMO && isAdmin && (
                 <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-line pt-4">
                   <div className="w-32">
                     <label className="label" htmlFor={`limit-${preset.name}`}>
