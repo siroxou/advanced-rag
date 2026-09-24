@@ -1,0 +1,4 @@
+# backend/.env holds a developer's real keys; COPY . . must never bake it in.
+.env
+.env.*
+.venv

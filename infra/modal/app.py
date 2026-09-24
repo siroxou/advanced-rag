@@ -17,8 +17,11 @@ app = modal.App("advanced-rag")
 backend_image = (
     modal.Image.debian_slim(python_version="3.12")
     .pip_install("uv")
-    .add_local_dir("backend", "/app/backend", copy=True)
+    # A developer's backend/.env holds real keys; never upload it or a macOS venv.
+    .add_local_dir("backend", "/app/backend", copy=True, ignore=[".env", ".env.*", ".venv"])
     .run_commands("cd /app/backend && uv sync --extra ml")
+    # Makes startup refuse the public dev JWT secret (see backend/app/main.py).
+    .env({"ENVIRONMENT": "cloud"})
 )
 
 vllm_image = modal.Image.debian_slim(python_version="3.12").pip_install("vllm>=0.6")

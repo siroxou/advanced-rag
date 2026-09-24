@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 FROM python:3.12-slim AS base
-ENV PYTHONUNBUFFERED=1 \
+# ENVIRONMENT=cloud makes startup refuse the public dev JWT secret (see main.py).
+ENV ENVIRONMENT=cloud \
+    PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
