@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import AppShell from "@/components/AppShell";
 import PageHeader from "@/components/PageHeader";
@@ -38,20 +38,26 @@ function Bars({
   points,
   format,
   tone,
+  ceil,
 }: {
   title: string;
   points: Point[];
   format: (v: number | null) => string;
   tone: string;
+  /** Fixed top of the scale (1 for rates); otherwise the data's own maximum. */
+  ceil?: number;
 }) {
-  const max = Math.max(1, ...points.map((p) => p.value ?? 0));
+  // Scale to the data, or cost (fractions of a cent) never draws a visible bar.
+  const max = ceil ?? (Math.max(0, ...points.map((p) => p.value ?? 0)) || 1);
   return (
     <div className="card p-4">
       <p className="text-sm font-semibold">{title}</p>
       {points.length === 0 ? (
         <p className="mt-6 text-sm text-faint">No data in this window.</p>
       ) : (
-        <div className="mt-4 flex h-32 items-end gap-1">
+        <div
+          className={`mt-4 flex h-32 items-end overflow-hidden ${points.length > 60 ? "" : "gap-1"}`}
+        >
           {points.map((p) => (
             <div
               key={p.bucket}
@@ -77,22 +83,26 @@ export default function MetricsPage() {
   const [bucket, setBucket] = useState("day");
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
     // Metrics read the whole audit log, so the backend serves them to a signed
     // admin only; the hosted demo has no audit log to aggregate.
     if (IS_HOSTED_DEMO || !isAdmin) return;
-    setError(null);
-    try {
-      setData(await getMetrics(range, bucket));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load metrics");
-    }
+    // A response for a window the user has already changed away from is ignored.
+    let stale = false;
+    getMetrics(range, bucket)
+      .then((d) => {
+        if (!stale) {
+          setError(null);
+          setData(d);
+        }
+      })
+      .catch((e) => {
+        if (!stale) setError(e instanceof Error ? e.message : "Failed to load metrics");
+      });
+    return () => {
+      stale = true;
+    };
   }, [range, bucket, isAdmin]);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch; state lands post-await
-    load();
-  }, [load]);
 
   const o: MetricPoint | undefined = data?.overall;
   const series = data?.series ?? [];
@@ -182,12 +192,14 @@ export default function MetricsPage() {
                 points={series.map((s) => ({ bucket: s.bucket, value: s.citation_coverage }))}
                 format={fmtPct}
                 tone="bg-info"
+                ceil={1}
               />
               <Bars
                 title="Failure rate"
                 points={series.map((s) => ({ bucket: s.bucket, value: s.failure_rate }))}
                 format={fmtPct}
                 tone="bg-danger"
+                ceil={1}
               />
             </div>
           </>
