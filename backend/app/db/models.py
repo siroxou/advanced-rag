@@ -131,3 +131,18 @@ class AuditLog(Base):
     answer_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     latency_ms: Mapped[int] = mapped_column(default=0)
     used_web: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+
+    # --- Metrics spine (Phase 6) -----------------------------------------------
+    # All nullable: populated for answered RAG/LLM requests; left unset on older
+    # rows and on the blocked / no-context paths. Powers the /metrics dashboard.
+    model: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prompt_tokens: Mapped[int | None] = mapped_column(nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(nullable=True)
+    cost_usd: Mapped[float | None] = mapped_column(nullable=True)
+    grounding_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    n_citations: Mapped[int | None] = mapped_column(nullable=True)
+    success: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    retrieval_ms: Mapped[int | None] = mapped_column(nullable=True)
+    generation_ms: Mapped[int | None] = mapped_column(nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(Text, nullable=True)

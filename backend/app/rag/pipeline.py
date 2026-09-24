@@ -12,18 +12,10 @@ unit-testable without a database or model.
 from __future__ import annotations
 
 from app.llm.base import ChatMessage
+from app.prompts import SYSTEM_PROMPT  # re-exported here for existing importers
 from app.rag.retriever import RetrievedChunk
 from app.rag.web import WebResult
 from app.schemas.chat import ChatTurn, Source
-
-SYSTEM_PROMPT = (
-    "You are a careful enterprise assistant. Answer ONLY using the numbered context "
-    "provided by the user. Follow these rules strictly:\n"
-    "- Cite every claim with the source number(s) in square brackets, e.g. [1] or [2][3].\n"
-    "- If the context does not contain the answer, reply exactly: \"I don't have enough "
-    'information in the provided documents to answer that." Do not use outside knowledge.\n'
-    "- Be concise and factual; do not invent sources or numbers."
-)
 
 NO_CONTEXT_MSG = "I don't have enough information in the provided documents to answer that."
 

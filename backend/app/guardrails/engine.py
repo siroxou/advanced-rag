@@ -24,6 +24,9 @@ class InputReport:
 class OutputReport:
     grounding_ok: bool = True
     invalid_citations: list[int] = field(default_factory=list)
+    # Distinct [n] citations in the answer, counted regardless of the grounding toggle
+    # (the metrics store wants citation coverage even when the guardrail is off).
+    n_citations: int = 0
     pii_found: list[str] = field(default_factory=list)
     # Set only when PII masking is on and PII was found - the answer with PII
     # spans replaced by typed placeholders. None means "leave the answer as is".
@@ -48,6 +51,7 @@ async def run_input_guardrails(text: str) -> InputReport:
 def run_output_guardrails(answer: str, n_sources: int) -> OutputReport:
     """Validate citations and detect/mask PII per the enabled output guardrails."""
     report = OutputReport()
+    report.n_citations = grounding.count_citations(answer)
     if runtime.guard_grounding():
         ground = grounding.validate_citations(answer, n_sources)
         report.grounding_ok = ground.allowed

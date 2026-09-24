@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -33,8 +34,11 @@ from app.guardrails.engine import (
     run_input_guardrails,
     run_output_guardrails,
 )
-from app.llm.base import ChatMessage
+from app.llm.base import ChatMessage, Usage
 from app.llm.factory import get_llm
+from app.observability import pricing
+from app.observability.tracing import RequestTrace
+from app.prompts import PROMPT_VERSION
 from app.rag import pipeline
 from app.rag.audit import write_audit
 from app.schemas.chat import ChatRequest, ChatResponse, GuardrailReport
@@ -86,6 +90,45 @@ def _report(out: OutputReport) -> GuardrailReport:
     )
 
 
+def _messages_payload(msgs: list[ChatMessage]) -> list[dict[str, str]]:
+    return [{"role": m.role, "content": m.content} for m in msgs]
+
+
+def _span_output(node: str, state: Mapping[str, Any]) -> Any:
+    """Richer per-node payload for the Langfuse waterfall (vs the terse UI _step_detail)."""
+    if node == "context":
+        return {"rewritten_query": state.get("query"), "need_web": bool(state.get("need_web"))}
+    if node == "retrieve":
+        return [
+            {"doc_id": str(c.doc_id), "score": round(c.score, 4), "anchor": c.citation_anchor}
+            for c in state.get("chunks", [])
+        ]
+    if node == "web":
+        return [{"title": w.title, "url": w.url} for w in state.get("web_results", [])]
+    if node == "compose":
+        return _messages_payload(state.get("messages", []))
+    return None
+
+
+def _guard_comment(out: OutputReport) -> str:
+    """One-line summary of guardrail problems, used as a Langfuse score comment."""
+    bits = []
+    if out.invalid_citations:
+        bits.append(f"invalid_citations={out.invalid_citations}")
+    if out.pii_found:
+        bits.append(f"pii={out.pii_found}")
+    return "; ".join(bits) or "ok"
+
+
+def _usage_fields(usage: Usage | None, model: str) -> dict[str, Any]:
+    """Token + cost audit columns derived from a completion's usage (None when absent)."""
+    return {
+        "prompt_tokens": usage.prompt_tokens if usage else None,
+        "completion_tokens": usage.completion_tokens if usage else None,
+        "cost_usd": pricing.cost(model, usage),
+    }
+
+
 router = APIRouter()
 
 
@@ -99,76 +142,145 @@ async def chat(
     temperature, max_tokens = _gen_params(req)
     query, history = pipeline.split_query(req.messages)
     started = time.perf_counter()
-
-    gin = await run_input_guardrails(query)
-    if gin.blocked:
-        message = f"{INPUT_BLOCKED_MSG} ({gin.reason})"
-        await write_audit(
-            username=user.username,
-            roles=user.roles,
-            query=query,
-            retrieved_doc_ids=[],
-            answer=message,
-            latency_ms=_elapsed_ms(started),
-        )
-        return ChatResponse(
-            content=message,
-            model=llm.model,
-            guardrails=GuardrailReport(input_blocked=True, block_reason=gin.reason),
-        )
-
-    if not req.use_rag:
-        msgs = [ChatMessage(role=m.role, content=m.content) for m in req.messages]
-        content = await llm.chat(msgs, temperature=temperature, max_tokens=max_tokens)
-        out = run_output_guardrails(content, 0)
-        content = out.masked_answer or content
-        await write_audit(
-            username=user.username,
-            roles=user.roles,
-            query=query,
-            retrieved_doc_ids=[],
-            answer=content,
-            latency_ms=_elapsed_ms(started),
-        )
-        return ChatResponse(content=content, model=llm.model, guardrails=_report(out))
-
-    state = await run_agent(
-        session, llm, username=user.username, roles=user.roles, query=query, history=history
+    # Non-streaming path: run_agent doesn't yield per node, so this gets a coarser
+    # trace (one retrieve span from final state + one generation span).
+    trace = RequestTrace.start(
+        "chat",
+        user_id=user.username,
+        input=query,
+        metadata={"use_rag": req.use_rag, "model": llm.model, "prompt_version": PROMPT_VERSION},
     )
-    sources = state.get("sources", [])
-    if not sources:
+    try:
+        gin = await run_input_guardrails(query)
+        if gin.blocked:
+            message = f"{INPUT_BLOCKED_MSG} ({gin.reason})"
+            trace.score("grounding", 0.0, comment=f"input_blocked:{gin.category}")
+            await write_audit(
+                username=user.username,
+                roles=user.roles,
+                query=query,
+                retrieved_doc_ids=[],
+                answer=message,
+                latency_ms=_elapsed_ms(started),
+                model=llm.model,
+                prompt_version=PROMPT_VERSION,
+                success=False,
+                failure_reason=f"input_blocked:{gin.category}",
+            )
+            return ChatResponse(
+                content=message,
+                model=llm.model,
+                guardrails=GuardrailReport(input_blocked=True, block_reason=gin.reason),
+            )
+
+        if not req.use_rag:
+            msgs = [ChatMessage(role=m.role, content=m.content) for m in req.messages]
+            gen_start = datetime.now(UTC)
+            completion = await llm.chat(msgs, temperature=temperature, max_tokens=max_tokens)
+            gen_end = datetime.now(UTC)
+            content = completion.text
+            out = run_output_guardrails(content, 0)
+            content = out.masked_answer or content
+            trace.generation(
+                "synthesis",
+                model=llm.model,
+                input=_messages_payload(msgs),
+                output=content,
+                usage=completion.usage,
+                start=gen_start,
+                end=gen_end,
+            )
+            trace.score("grounding", 1.0 if out.grounding_ok else 0.0, comment=_guard_comment(out))
+            await write_audit(
+                username=user.username,
+                roles=user.roles,
+                query=query,
+                retrieved_doc_ids=[],
+                answer=content,
+                latency_ms=_elapsed_ms(started),
+                model=llm.model,
+                prompt_version=PROMPT_VERSION,
+                grounding_ok=out.grounding_ok,
+                n_citations=out.n_citations,
+                success=True,
+                generation_ms=int((gen_end - gen_start).total_seconds() * 1000),
+                **_usage_fields(completion.usage, llm.model),
+            )
+            return ChatResponse(content=content, model=llm.model, guardrails=_report(out))
+
+        ret_start = datetime.now(UTC)
+        state = await run_agent(
+            session, llm, username=user.username, roles=user.roles, query=query, history=history
+        )
+        ret_end = datetime.now(UTC)
+        retrieval_ms = int((ret_end - ret_start).total_seconds() * 1000)
+        trace.span("retrieve", output=_span_output("retrieve", state), start=ret_start, end=ret_end)
+        sources = state.get("sources", [])
+        if not sources:
+            await write_audit(
+                username=user.username,
+                roles=user.roles,
+                query=state.get("query", query),
+                retrieved_doc_ids=[],
+                answer=pipeline.NO_CONTEXT_MSG,
+                latency_ms=_elapsed_ms(started),
+                model=llm.model,
+                prompt_version=PROMPT_VERSION,
+                retrieval_ms=retrieval_ms,
+                success=False,
+                failure_reason="no_context",
+            )
+            return ChatResponse(
+                content=pipeline.NO_CONTEXT_MSG,
+                model=llm.model,
+                rewritten_query=state.get("query"),
+            )
+
+        gen_start = datetime.now(UTC)
+        completion = await llm.chat(
+            state["messages"], temperature=temperature, max_tokens=max_tokens
+        )
+        gen_end = datetime.now(UTC)
+        content = completion.text
+        out = run_output_guardrails(content, len(sources))
+        content = out.masked_answer or content
+        trace.generation(
+            "synthesis",
+            model=llm.model,
+            input=_messages_payload(state["messages"]),
+            output=content,
+            usage=completion.usage,
+            start=gen_start,
+            end=gen_end,
+        )
+        trace.score("grounding", 1.0 if out.grounding_ok else 0.0, comment=_guard_comment(out))
         await write_audit(
             username=user.username,
             roles=user.roles,
             query=state.get("query", query),
-            retrieved_doc_ids=[],
-            answer=pipeline.NO_CONTEXT_MSG,
+            retrieved_doc_ids=state.get("doc_ids", []),
+            answer=content,
             latency_ms=_elapsed_ms(started),
+            used_web=state.get("used_web", False),
+            model=llm.model,
+            prompt_version=PROMPT_VERSION,
+            grounding_ok=out.grounding_ok,
+            n_citations=out.n_citations,
+            success=True,
+            retrieval_ms=retrieval_ms,
+            generation_ms=int((gen_end - gen_start).total_seconds() * 1000),
+            **_usage_fields(completion.usage, llm.model),
         )
         return ChatResponse(
-            content=pipeline.NO_CONTEXT_MSG, model=llm.model, rewritten_query=state.get("query")
+            content=content,
+            model=llm.model,
+            sources=sources,
+            rewritten_query=state.get("query"),
+            used_web=state.get("used_web", False),
+            guardrails=_report(out),
         )
-
-    content = await llm.chat(state["messages"], temperature=temperature, max_tokens=max_tokens)
-    out = run_output_guardrails(content, len(sources))
-    content = out.masked_answer or content
-    await write_audit(
-        username=user.username,
-        roles=user.roles,
-        query=state.get("query", query),
-        retrieved_doc_ids=state.get("doc_ids", []),
-        answer=content,
-        latency_ms=_elapsed_ms(started),
-        used_web=state.get("used_web", False),
-    )
-    return ChatResponse(
-        content=content,
-        model=llm.model,
-        sources=sources,
-        rewritten_query=state.get("query"),
-        used_web=state.get("used_web", False),
-        guardrails=_report(out),
-    )
+    finally:
+        trace.finish()
 
 
 @router.post("/chat/stream")
@@ -183,107 +295,167 @@ async def chat_stream(
     async def event_gen() -> AsyncIterator[str]:
         query, history = pipeline.split_query(req.messages)
         started = time.perf_counter()
+        trace = RequestTrace.start(
+            "chat_stream",
+            user_id=user.username,
+            input=query,
+            metadata={
+                "use_rag": req.use_rag,
+                "model": llm.model,
+                "prompt_version": PROMPT_VERSION,
+            },
+        )
+        try:
+            gin = await run_input_guardrails(query)
+            if gin.blocked:
+                guard: dict[str, Any] = {"input_blocked": True, "block_reason": gin.reason}
+                yield f"data: {json.dumps({'guardrails': guard})}\n\n"
+                message = f"{INPUT_BLOCKED_MSG} ({gin.reason})"
+                yield f"data: {json.dumps({'delta': message})}\n\n"
+                yield "data: [DONE]\n\n"
+                trace.score("grounding", 0.0, comment=f"input_blocked:{gin.category}")
+                await write_audit(
+                    username=user.username,
+                    roles=user.roles,
+                    query=query,
+                    retrieved_doc_ids=[],
+                    answer=message,
+                    latency_ms=_elapsed_ms(started),
+                    model=llm.model,
+                    prompt_version=PROMPT_VERSION,
+                    success=False,
+                    failure_reason=f"input_blocked:{gin.category}",
+                )
+                return
 
-        gin = await run_input_guardrails(query)
-        if gin.blocked:
-            guard: dict[str, Any] = {"input_blocked": True, "block_reason": gin.reason}
+            retrieval_ms: int | None = None
+            if not req.use_rag:
+                msgs = [ChatMessage(role=m.role, content=m.content) for m in req.messages]
+                doc_ids: list[str] = []
+                n_sources = 0
+                used_web = False
+            else:
+                # Announce the plan so the UI can render the step checklist immediately,
+                # then stream the graph and tick each node done as it completes.
+                plan = [{"node": n, "label": _STEP_LABELS[n]} for n in _PLAN]
+                yield f"data: {json.dumps({'plan': plan})}\n\n"
+
+                state: dict[str, Any] = {}
+                t_prev = datetime.now(UTC)
+                async for node, merged in stream_agent(
+                    session,
+                    llm,
+                    username=user.username,
+                    roles=user.roles,
+                    query=query,
+                    history=history,
+                ):
+                    t_now = datetime.now(UTC)
+                    state = merged
+                    # One span per node, timed by the boundary between yields.
+                    trace.span(
+                        node,
+                        input=query if node == "context" else None,
+                        output=_span_output(node, merged),
+                        start=t_prev,
+                        end=t_now,
+                    )
+                    if node == "retrieve":
+                        retrieval_ms = int((t_now - t_prev).total_seconds() * 1000)
+                    t_prev = t_now
+                    step = {
+                        "node": node,
+                        "label": _STEP_LABELS.get(node, node),
+                        "status": "done",
+                        "detail": _step_detail(node, merged),
+                    }
+                    yield f"data: {json.dumps({'step': step})}\n\n"
+
+                sources = state.get("sources", [])
+                meta = {
+                    "sources": [s.model_dump() for s in sources],
+                    "rewritten_query": state.get("query"),
+                    "used_web": state.get("used_web", False),
+                }
+                yield f"data: {json.dumps(meta)}\n\n"
+                if not sources:
+                    yield f"data: {json.dumps({'delta': pipeline.NO_CONTEXT_MSG})}\n\n"
+                    yield "data: [DONE]\n\n"
+                    await write_audit(
+                        username=user.username,
+                        roles=user.roles,
+                        query=state.get("query", query),
+                        retrieved_doc_ids=[],
+                        answer=pipeline.NO_CONTEXT_MSG,
+                        latency_ms=_elapsed_ms(started),
+                        model=llm.model,
+                        prompt_version=PROMPT_VERSION,
+                        retrieval_ms=retrieval_ms,
+                        success=False,
+                        failure_reason="no_context",
+                    )
+                    return
+                msgs = state["messages"]
+                doc_ids = state.get("doc_ids", [])
+                n_sources = len(sources)
+                used_web = state.get("used_web", False)
+                query = state.get("query", query)
+
+            parts: list[str] = []
+            gen_usage: Usage | None = None
+            gen_start = datetime.now(UTC)
+            async for chunk in llm.stream(msgs, temperature=temperature, max_tokens=max_tokens):
+                if chunk.delta:
+                    parts.append(chunk.delta)
+                    yield f"data: {json.dumps({'delta': chunk.delta})}\n\n"
+                if chunk.usage is not None:
+                    gen_usage = chunk.usage
+            gen_end = datetime.now(UTC)
+            generation_ms = int((gen_end - gen_start).total_seconds() * 1000)
+
+            answer = "".join(parts)
+            trace.generation(
+                "synthesis",
+                model=llm.model,
+                input=_messages_payload(msgs),
+                output=answer,
+                usage=gen_usage,
+                start=gen_start,
+                end=gen_end,
+            )
+            out = run_output_guardrails(answer, n_sources)
+            # Tokens are already on the wire, so masking can't retract them; instead
+            # emit the sanitized answer as a replacement frame the UI swaps in.
+            if out.masked_answer is not None:
+                answer = out.masked_answer
+                yield f"data: {json.dumps({'content_masked': answer})}\n\n"
+            guard = {
+                "grounding_ok": out.grounding_ok,
+                "invalid_citations": out.invalid_citations,
+                "pii_found": out.pii_found,
+            }
             yield f"data: {json.dumps({'guardrails': guard})}\n\n"
-            message = f"{INPUT_BLOCKED_MSG} ({gin.reason})"
-            yield f"data: {json.dumps({'delta': message})}\n\n"
             yield "data: [DONE]\n\n"
+
+            trace.score("grounding", 1.0 if out.grounding_ok else 0.0, comment=_guard_comment(out))
             await write_audit(
                 username=user.username,
                 roles=user.roles,
                 query=query,
-                retrieved_doc_ids=[],
-                answer=message,
+                retrieved_doc_ids=doc_ids,
+                answer=answer,
                 latency_ms=_elapsed_ms(started),
+                used_web=used_web,
+                model=llm.model,
+                prompt_version=PROMPT_VERSION,
+                grounding_ok=out.grounding_ok,
+                n_citations=out.n_citations,
+                success=True,
+                retrieval_ms=retrieval_ms,
+                generation_ms=generation_ms,
+                **_usage_fields(gen_usage, llm.model),
             )
-            return
-
-        if not req.use_rag:
-            msgs = [ChatMessage(role=m.role, content=m.content) for m in req.messages]
-            doc_ids: list[str] = []
-            n_sources = 0
-            used_web = False
-        else:
-            # Announce the plan so the UI can render the step checklist immediately,
-            # then stream the graph and tick each node done as it completes.
-            plan = [{"node": n, "label": _STEP_LABELS[n]} for n in _PLAN]
-            yield f"data: {json.dumps({'plan': plan})}\n\n"
-
-            state: dict[str, Any] = {}
-            async for node, merged in stream_agent(
-                session,
-                llm,
-                username=user.username,
-                roles=user.roles,
-                query=query,
-                history=history,
-            ):
-                state = merged
-                step = {
-                    "node": node,
-                    "label": _STEP_LABELS.get(node, node),
-                    "status": "done",
-                    "detail": _step_detail(node, merged),
-                }
-                yield f"data: {json.dumps({'step': step})}\n\n"
-
-            sources = state.get("sources", [])
-            meta = {
-                "sources": [s.model_dump() for s in sources],
-                "rewritten_query": state.get("query"),
-                "used_web": state.get("used_web", False),
-            }
-            yield f"data: {json.dumps(meta)}\n\n"
-            if not sources:
-                yield f"data: {json.dumps({'delta': pipeline.NO_CONTEXT_MSG})}\n\n"
-                yield "data: [DONE]\n\n"
-                await write_audit(
-                    username=user.username,
-                    roles=user.roles,
-                    query=state.get("query", query),
-                    retrieved_doc_ids=[],
-                    answer=pipeline.NO_CONTEXT_MSG,
-                    latency_ms=_elapsed_ms(started),
-                )
-                return
-            msgs = state["messages"]
-            doc_ids = state.get("doc_ids", [])
-            n_sources = len(sources)
-            used_web = state.get("used_web", False)
-            query = state.get("query", query)
-
-        parts: list[str] = []
-        async for chunk in llm.stream(msgs, temperature=temperature, max_tokens=max_tokens):
-            if chunk.delta:
-                parts.append(chunk.delta)
-                yield f"data: {json.dumps({'delta': chunk.delta})}\n\n"
-
-        answer = "".join(parts)
-        out = run_output_guardrails(answer, n_sources)
-        # Tokens are already on the wire, so masking can't retract them; instead
-        # emit the sanitized answer as a replacement frame the UI swaps in.
-        if out.masked_answer is not None:
-            answer = out.masked_answer
-            yield f"data: {json.dumps({'content_masked': answer})}\n\n"
-        guard = {
-            "grounding_ok": out.grounding_ok,
-            "invalid_citations": out.invalid_citations,
-            "pii_found": out.pii_found,
-        }
-        yield f"data: {json.dumps({'guardrails': guard})}\n\n"
-        yield "data: [DONE]\n\n"
-
-        await write_audit(
-            username=user.username,
-            roles=user.roles,
-            query=query,
-            retrieved_doc_ids=doc_ids,
-            answer=answer,
-            latency_ms=_elapsed_ms(started),
-            used_web=used_web,
-        )
+        finally:
+            trace.finish()
 
     return StreamingResponse(event_gen(), media_type="text/event-stream")

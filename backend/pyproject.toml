@@ -40,6 +40,13 @@ dev = [
 obs = [
     "langfuse>=2.0",
 ]
+# Eval-gate judges (regression gating). RAGAS faithfulness needs an LLM judge; the
+# gate still runs its citation/latency/cost checks without this extra - faithfulness
+# just reports null and its threshold is skipped.
+eval = [
+    "ragas>=0.2",
+    "langchain-openai>=0.3",
+]
 
 [tool.uv]
 package = false

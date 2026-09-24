@@ -28,6 +28,8 @@ adapters/
 *.safetensors
 *.bin
 ml/datasets/*.jsonl
+# ...except the curated golden eval set, which is committed so the CI gate is deterministic.
+!ml/datasets/golden.jsonl
 
 # --- OS / editor / local tooling ---
 .DS_Store

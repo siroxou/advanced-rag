@@ -370,6 +370,38 @@ export async function getAuditLog(
   return res.json();
 }
 
+// ── Metrics ─────────────────────────────────────────────────────────────────────
+
+export type MetricPoint = {
+  n: number;
+  p50_ms: number | null;
+  p95_ms: number | null;
+  avg_cost_usd: number | null;
+  citation_coverage: number | null;
+  failure_rate: number | null;
+};
+
+export type MetricsResponse = {
+  window: string;
+  bucket: string;
+  overall: MetricPoint;
+  series: (MetricPoint & { bucket: string })[];
+};
+
+export async function getMetrics(
+  windowSize = "7d",
+  bucket = "day"
+): Promise<MetricsResponse> {
+  // Admin-gated. In demo mode the demo identity carries the admin role, so no token
+  // is needed; if a real token is present we send it (a non-admin will get a 403).
+  const token = getToken();
+  const res = await fetch(`${API_BASE}/api/metrics?window=${windowSize}&bucket=${bucket}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) throw new Error(`Get metrics failed (${res.status})`);
+  return res.json();
+}
+
 // ── Documents (mutation) ───────────────────────────────────────────────────────
 
 export async function updateDocument(

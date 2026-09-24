@@ -12,7 +12,7 @@ from collections.abc import Sequence
 import pytest
 
 from app.ingestion.classifier import Classification, classify
-from app.llm.base import ChatMessage
+from app.llm.base import ChatMessage, Completion
 
 CLEAN = "Quarterly marketing roadmap and product highlights for the public website."
 WITH_SSN = "Employee record: SSN 123-45-6789, compensation details attached."
@@ -31,11 +31,11 @@ class FakeLLM:
 
     async def chat(
         self, messages: Sequence[ChatMessage], *, temperature: float = 0.0, max_tokens: int = 256
-    ) -> str:
+    ) -> Completion:
         self.calls += 1
         if self._raises:
             raise RuntimeError("backend down")
-        return self._reply
+        return Completion(text=self._reply)
 
 
 def _verdict(tier: str, *, reason: str = "x", confidence: float = 0.9) -> str:

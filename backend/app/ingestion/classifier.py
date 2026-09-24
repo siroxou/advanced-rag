@@ -120,14 +120,16 @@ async def classify(llm: LLMProvider, text: str) -> Classification:
         )
 
     try:
-        raw = await llm.chat(
-            [
-                ChatMessage(role="system", content=_SYSTEM),
-                ChatMessage(role="user", content=f"Document excerpt:\n{excerpt}"),
-            ],
-            temperature=0.0,
-            max_tokens=256,
-        )
+        raw = (
+            await llm.chat(
+                [
+                    ChatMessage(role="system", content=_SYSTEM),
+                    ChatMessage(role="user", content=f"Document excerpt:\n{excerpt}"),
+                ],
+                temperature=0.0,
+                max_tokens=256,
+            )
+        ).text
     except Exception:  # an outage must not silently widen access
         logger.warning("classify_llm_failed", exc_info=True)
         return Classification.for_tier(

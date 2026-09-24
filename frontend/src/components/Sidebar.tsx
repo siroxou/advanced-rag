@@ -12,6 +12,7 @@ const NAV = [
   { label: "Presets", href: "/presets", icon: "📚" },
   { label: "Admin", href: "/admin", icon: "👥" },
   { label: "Security", href: "/security", icon: "🔒" },
+  { label: "Metrics", href: "/metrics", icon: "📊" },
   { label: "Settings", href: "/settings", icon: "⚙️" },
 ];
 
