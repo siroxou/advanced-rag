@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,7 +69,10 @@ async def ingest_preset(
     the ACL every resulting chunk is stored with.
     """
     opts = body or PresetIngestRequest()
-    preset = get_preset(name)
+    try:
+        preset = get_preset(name)
+    except KeyError as exc:
+        raise HTTPException(404, exc.args[0]) from exc
 
     preset_roles = (
         [r.strip() for r in opts.roles.split(",") if r.strip()] if opts.roles else preset.roles
