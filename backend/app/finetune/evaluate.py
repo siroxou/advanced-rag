@@ -7,7 +7,8 @@ so a quality/latency/cost regression fails CI instead of shipping:
     uv run python -m app.finetune.evaluate --data ../ml/datasets/golden.jsonl \\
         --min-citation-rate 0.8 --max-p95-latency-ms 8000 --max-cost-usd 0.02
 
-Every threshold defaults to off (0.0) and only fires when set. A ``metrics.json``
+Every threshold defaults to off (0.0) and only fires when set; ``--min-records``
+defaults to 1, so an empty dataset always fails. A ``metrics.json``
 summary is always written (``--out``) for CI to upload as an artifact.
 """
 
@@ -23,7 +24,7 @@ from statistics import quantiles
 from typing import Any
 
 from app.core.db import SessionFactory
-from app.guardrails.grounding import validate_citations
+from app.guardrails.grounding import count_citations, validate_citations
 from app.llm.factory import get_llm
 from app.observability import pricing
 from app.rag import pipeline
@@ -51,7 +52,8 @@ def _p95(values: list[float]) -> float | None:
         return None
     if len(values) == 1:
         return values[0]
-    return quantiles(values, n=100)[94]  # 99 cut points -> index 94 is the 95th pct
+    # Inclusive, so a small sample never reports a tail beyond its own maximum.
+    return quantiles(values, n=100, method="inclusive")[94]  # index 94 = 95th pct
 
 
 async def _run(records: list[dict[str, Any]], args: argparse.Namespace) -> dict[str, Any]:
@@ -81,19 +83,25 @@ async def _run(records: list[dict[str, Any]], args: argparse.Namespace) -> dict[
                 refused_ok += int(_is_refusal(answer))
             else:
                 answered += 1
-                ok = validate_citations(answer, n_sources).allowed and not _is_refusal(answer)
+                # An answer with no [n] at all is not a cited answer, however valid.
+                ok = (
+                    count_citations(answer) > 0
+                    and validate_citations(answer, n_sources).allowed
+                    and not _is_refusal(answer)
+                )
                 cited_ok += int(ok)
                 cost = pricing.cost(llm.model, usage)
                 if cost is not None:
                     costs.append(cost)
 
-    citation_rate = cited_ok / answered if answered else 1.0
+    # None, not 1.0: with nothing answered there is no rate, and the gate must say so.
+    citation_rate = cited_ok / answered if answered else None
     p95_latency = _p95(latencies)
     metrics: dict[str, Any] = {
         "model": llm.model,
         "n": len(records),
         "answered": answered,
-        "citation_rate": round(citation_rate, 4),
+        "citation_rate": round(citation_rate, 4) if citation_rate is not None else None,
         "refusal_total": refusal_total,
         "refusal_accuracy": round(refused_ok / refusal_total, 4) if refusal_total else None,
         "p95_latency_ms": round(p95_latency, 1) if p95_latency is not None else None,
@@ -117,7 +125,9 @@ def _gate(metrics: dict[str, Any], args: argparse.Namespace) -> None:
     """Fail the build if a set threshold is crossed. Optional/None metrics are skipped."""
     failures: list[str] = []
     cr = metrics["citation_rate"]
-    if args.min_citation_rate and cr < args.min_citation_rate:
+    if args.min_citation_rate and cr is None:
+        failures.append("no answerable records to score")
+    elif args.min_citation_rate and cr < args.min_citation_rate:
         failures.append(f"citation rate {cr:.0%} < {args.min_citation_rate:.0%}")
     p95 = metrics["p95_latency_ms"]
     if args.max_p95_latency_ms and p95 is not None and p95 > args.max_p95_latency_ms:
@@ -136,6 +146,12 @@ def main() -> None:
         "--data", required=True, help="JSONL dataset (e.g. ml/datasets/golden.jsonl)"
     )
     parser.add_argument("--out", default="metrics.json", help="Summary artifact path")
+    parser.add_argument(
+        "--min-records",
+        type=int,
+        default=1,
+        help="Exit non-zero if the dataset has fewer records than this",
+    )
     parser.add_argument(
         "--min-citation-rate",
         type=float,
@@ -160,6 +176,10 @@ def main() -> None:
         for line in Path(args.data).read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
+    # Checked before any DB or model call: an empty or truncated dataset must fail
+    # the gate, not pass it having measured nothing.
+    if len(records) < args.min_records:
+        sys.exit(f"FAIL: {len(records)} records < --min-records {args.min_records}")
     metrics = asyncio.run(_run(records, args))
     Path(args.out).write_text(json.dumps(metrics, indent=2), encoding="utf-8")
     print(f"wrote {args.out}")
