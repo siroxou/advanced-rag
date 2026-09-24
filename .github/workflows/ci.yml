@@ -38,12 +38,12 @@ jobs:
       postgres:
         image: pgvector/pgvector:pg16
         env:
-          POSTGRES_USER: rag
-          POSTGRES_PASSWORD: rag
-          POSTGRES_DB: rag
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
         ports: ["5432:5432"]
         options: >-
-          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+          --health-cmd "pg_isready -U postgres" --health-interval 10s --health-timeout 5s --health-retries 5
     env:
       DATABASE_URL: postgresql+asyncpg://rag:rag@localhost:5432/rag
     steps:
@@ -53,13 +53,16 @@ jobs:
           enable-cache: true
       - run: uv python install 3.12
       - run: uv sync --extra dev
+      # Service containers cannot mount an init script, so run the same file
+      # the compose volume runs: it creates the non-superuser app role `rag`
+      # and its database, which the migrations and tests then connect as.
+      - name: Create the app role so RLS is enforced
+        run: psql -v ON_ERROR_STOP=1 -h localhost -U postgres -f ../infra/postgres/init/01-app-role.sql
+        env:
+          PGPASSWORD: postgres
       - run: uv run alembic upgrade head
-      # Service containers cannot mount an init script, so reach the same end
-      # state as infra/postgres/init/01-app-role.sql by hand. Migrations run
-      # first, as the superuser, so CREATE EXTENSION is never in question.
-      - name: Demote the app role so RLS is enforced
-        run: psql "postgresql://rag:rag@localhost:5432/rag" -c "ALTER ROLE rag NOSUPERUSER; GRANT CREATE ON SCHEMA public TO rag;"
-      - run: uv run pytest -q -m integration
+      # -rs lists skips, so a green job that skipped the RLS proof is visible.
+      - run: uv run pytest -q -rs -m integration
 
   frontend:
     name: Frontend (lint · test · build)

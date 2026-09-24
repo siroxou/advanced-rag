@@ -89,7 +89,9 @@ curl -s localhost:8000/api/health | jq      # {"status":"ok","llm_reachable":tru
 ```
 
 > No Docker? Any Postgres 16+ with the `pgvector` extension works - point `DATABASE_URL` at it
-> (`CREATE EXTENSION vector;`) and skip `make up`.
+> and skip `make up`. The app role must not be a superuser, or Postgres silently skips RLS: run
+> [`infra/postgres/init/01-app-role.sql`](infra/postgres/init/01-app-role.sql) once as a superuser
+> (`psql -d postgres -f infra/postgres/init/01-app-role.sql`) to create it.
 
 ## Ingest documents and chat (Phase 1 + 2)
 

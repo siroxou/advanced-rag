@@ -33,9 +33,9 @@ _TIERS = [
 
 _BYPASS_HINT = (
     "The app role bypasses RLS (superuser or BYPASSRLS), so the policy is not "
-    "enforced and this test cannot prove anything. Apply "
-    "infra/postgres/init/01-app-role.sql, or recreate the volume with "
-    "`docker compose down -v && make up`."
+    "enforced and this test cannot prove anything. Connect as the ordinary role "
+    "that infra/postgres/init/01-app-role.sql creates (run it as a superuser), or "
+    "recreate the volume with `docker compose down -v && make up`."
 )
 
 _INSERT_CHUNK = text(

@@ -30,9 +30,11 @@ that are easy to get wrong, each of which would silently disable the protection.
    extends the policy to the table *owner*. Both are needed, and the first is easy to lose:
    the official Postgres image creates `POSTGRES_USER` as a superuser, so a stock
    `docker compose up` would have left the policy inert. `chunks` is FORCE'd in migration
-   0002, and [`infra/postgres/init/01-app-role.sql`](../../infra/postgres/init/01-app-role.sql)
-   demotes the app role on first init. CI reaches the same state explicitly, because service
-   containers cannot mount an init script.
+   0002, and the app never connects as the bootstrap user:
+   [`infra/postgres/init/01-app-role.sql`](../../infra/postgres/init/01-app-role.sql) runs as
+   the bootstrap superuser (`postgres`) and creates an ordinary `rag` role that owns the `rag`
+   database. Compose runs it on first init; CI runs the same file with `psql -f`, because
+   service containers cannot mount an init script.
 
    Reads are gated by the policy above; per-command `INSERT`/`UPDATE`/`DELETE` policies stay
    permissive so ingestion still works without granting any read access.
@@ -47,6 +49,13 @@ that are easy to get wrong, each of which would silently disable the protection.
 - Every answered query is recorded in an append-only `audit_log` (user, roles, query, retrieved
   doc ids, answer hash, latency).
 - Operational note: managed Postgres (Neon/Supabase) gives the app a non-superuser role by
-  default. On an *existing* local volume the init script will not re-run, so apply it by hand
-  or recreate the volume with `docker compose down -v && make up`. The test above is what
+  default. A local volume created before the amendment below still has `rag` as its bootstrap
+  superuser, so recreate it with `docker compose down -v && make up`. The test above is what
   catches this either way.
+
+## Amendments
+
+- **2026-09-24:** The first version demoted `rag` with `ALTER ROLE rag NOSUPERUSER`. Because
+  `rag` was also `POSTGRES_USER`, it was the bootstrap superuser, which Postgres refuses to
+  demote, so the CI integration job failed before any test ran. The bootstrap user is now
+  `postgres`, and `rag` is created as an ordinary role that owns its database.

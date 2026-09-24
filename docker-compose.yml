@@ -8,19 +8,20 @@ services:
     image: pgvector/pgvector:pg16
     container_name: advanced-rag-db
     environment:
-      POSTGRES_USER: rag
-      POSTGRES_PASSWORD: rag
-      POSTGRES_DB: rag
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # Demotes the app role to non-superuser on first init, so Row-Level
-      # Security is actually enforced. Only runs against an empty data dir:
-      # on an existing volume, apply infra/postgres/init/01-app-role.sql by hand.
+      # Creates the non-superuser app role `rag` and its database on first init,
+      # so Row-Level Security is actually enforced. Only runs against an empty
+      # data dir: a volume created before this change must be recreated
+      # (`docker compose down -v && make up`).
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rag -d rag"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
       interval: 5s
       timeout: 5s
       retries: 12
