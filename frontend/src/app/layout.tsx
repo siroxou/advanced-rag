@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Acme RAG - enterprise retrieval with access control",
   description:
-    "A multi-agent document assistant that enforces who can see what, cites every claim, and refuses rather than hallucinates.",
+    "A document assistant that enforces who can see what, cites the passages it uses, and refuses when nothing you may read supports an answer.",
 };
 
 export const viewport: Viewport = {

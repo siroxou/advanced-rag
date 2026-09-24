@@ -12,17 +12,18 @@ import {
   IconChat,
 } from "@/components/icons";
 import ThemeToggle from "@/components/ThemeToggle";
+import { IS_HOSTED_DEMO } from "@/lib/api";
 
 const FEATURES = [
   {
     Icon: IconLock,
-    title: "Access control at the data layer",
+    title: "Access control at retrieval time",
     body: "Switch role and watch the same question get answered for an admin and refused for a viewer. The filter runs during retrieval, so a restricted passage never reaches the model.",
   },
   {
     Icon: IconChat,
-    title: "Multi-agent, grounded answers",
-    body: "Each query runs visible agent steps - understand, retrieve, compose, answer - and every reply cites the passage it used. No citation, no claim.",
+    title: "Grounded, cited answers",
+    body: "Each query shows its steps - understand, retrieve, compose, answer - and the reply cites the passages it used. A citation to a passage that was not retrieved is flagged.",
   },
   {
     Icon: IconAlert,
@@ -81,9 +82,9 @@ export default function Home() {
             Enterprise RAG with access control built in
           </h1>
           <p className="max-w-2xl text-lg leading-relaxed text-muted">
-            A multi-agent document assistant that enforces who can see what, cites every claim,
-            and refuses rather than hallucinates. Try it as three different roles in under a
-            minute.
+            A document assistant that enforces who can see what, cites the passages it uses, and
+            refuses when nothing you may read supports an answer. Try it as three different roles
+            in under a minute.
           </p>
           <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
             <Link href="/chat" className="btn btn-primary">
@@ -155,32 +156,33 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Bring your own key */}
-        <section className="card mt-8 flex flex-col gap-4 p-6 sm:flex-row sm:items-center">
-          <div className="flex-1">
-            <h2 className="font-semibold">Retrieval runs with no setup</h2>
-            <p className="mt-1.5 text-sm leading-relaxed text-muted">
-              Access control, retrieval and the guardrails work out of the box. To have a model
-              write the answers, add your own API key: OpenAI, Anthropic, Google, Groq,
-              OpenRouter and more. It is held in an httpOnly cookie in your browser and sent only
-              to the provider you pick.
-            </p>
-          </div>
-          <Link href="/settings" className="btn btn-secondary shrink-0">
-            Add a key
-            <IconArrowRight size={15} />
-          </Link>
-        </section>
+        {/* Bring your own key: only the hosted demo keeps keys in a cookie. */}
+        {IS_HOSTED_DEMO && (
+          <section className="card mt-8 flex flex-col gap-4 p-6 sm:flex-row sm:items-center">
+            <div className="flex-1">
+              <h2 className="font-semibold">Retrieval runs with no setup</h2>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted">
+                Access control, retrieval and the guardrails work out of the box. To have a model
+                write the answers, add your own API key: OpenAI, Anthropic, Google, Groq,
+                OpenRouter and more. It is kept in an httpOnly cookie, read only by this app&apos;s
+                server, and forwarded only to the provider you pick.
+              </p>
+            </div>
+            <Link href="/settings" className="btn btn-secondary shrink-0">
+              Add a key
+              <IconArrowRight size={15} />
+            </Link>
+          </section>
+        )}
       </main>
 
       <footer className="border-t border-line">
         <div className="mx-auto max-w-5xl px-6 py-8 text-center text-xs leading-relaxed text-faint">
           <p className="mx-auto max-w-2xl">
-            This hosted demo runs a curated corpus and simulates role-based access in the
-            application layer. In the full system that check is enforced by Postgres Row-Level
-            Security, so the database itself refuses rows the caller may not read. That system -
-            FastAPI, LangGraph agents, RLS, BGE-M3 hybrid retrieval and a local Gemma 4 - is open
-            source.
+            {IS_HOSTED_DEMO &&
+              "This hosted demo runs a curated corpus, plays the agent steps as a fixed sequence, and simulates role-based access in the application layer. In the full system that check is enforced by Postgres Row-Level Security, so the database itself refuses rows the caller may not read. "}
+            The full system - FastAPI, LangGraph agents, RLS, BGE-M3 plus full-text hybrid
+            retrieval and a local Gemma 4 - is open source.
           </p>
           <a
             href="https://github.com/siroxou/advanced-rag"
