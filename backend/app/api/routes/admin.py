@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +18,16 @@ from app.db.models import User
 from app.security.passwords import hash_password
 
 router = APIRouter()
+
+
+class CreateUserRequest(BaseModel):
+    """What the People page posts. A JSON body keeps the password out of the URL
+    (and so out of access logs); ``roles`` is comma-separated.
+    """
+
+    username: str
+    password: str
+    roles: str = "viewer"
 
 
 @router.get("/admin/users")
@@ -41,25 +52,24 @@ async def list_users(
 
 @router.post("/admin/users")
 async def create_user(
-    username: str,
-    password: str,
-    roles: str = "viewer",
+    body: CreateUserRequest,
     session: AsyncSession = Depends(get_session),
     _: CurrentUser = RequireAdmin,
 ) -> dict[str, Any]:
     """Create a new user with specified roles."""
+    username = body.username
     # Check if user already exists
     existing = await session.execute(select(User).where(User.username == username))
     if existing.scalar_one_or_none():
         raise HTTPException(400, "Username already exists")
 
-    roles_list = [r.strip() for r in roles.split(",") if r.strip()]
+    roles_list = [r.strip() for r in body.roles.split(",") if r.strip()]
     if not roles_list:
         roles_list = ["viewer"]
 
     new_user = User(
         username=username,
-        hashed_password=hash_password(password),
+        hashed_password=hash_password(body.password),
         roles=roles_list,
         is_active=True,
     )

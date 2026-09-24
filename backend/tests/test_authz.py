@@ -61,7 +61,7 @@ def test_mutation_without_a_token_is_401() -> None:
     with TestClient(app) as client:
         assert client.put("/api/settings", json={}).status_code == 401
         assert (
-            client.post("/api/admin/users", params={"username": "x", "password": "y"}).status_code
+            client.post("/api/admin/users", json={"username": "x", "password": "y"}).status_code
             == 401
         )
         assert client.post("/api/presets/fred-core/ingest", json={}).status_code == 401
@@ -111,3 +111,12 @@ def test_signed_admin_sees_every_audit_row() -> None:
         resp = client.get("/api/audit", headers=_auth("ada", ["admin"]))
     assert resp.status_code == 200
     assert "WHERE" not in str(db.stmts[0])
+
+
+def test_create_user_reads_the_console_json_body() -> None:
+    body = {"username": "neo", "password": "pw", "roles": "analyst"}
+    with _fake_db() as db, TestClient(app) as client:
+        resp = client.post("/api/admin/users", json=body, headers=_auth("ada", ["admin"]))
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["roles"] == ["analyst"]
+    assert db.added[0].username == "neo"
