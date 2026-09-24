@@ -36,7 +36,7 @@ corpus: ## Download a small sample PDF corpus into backend/data/raw
 
 ingest: ## Ingest backend/data/raw into the corpus (override ROLES=... SOURCE=...)
 	cd backend && uv run python -m app.ingestion.cli \
-		--input data/raw --source-id $(or $(SOURCE),corpus) --roles $(or $(ROLES),viewer,analyst,admin)
+		--input data/raw --source-id $(or $(SOURCE),corpus) --roles $(if $(ROLES),$(ROLES),viewer,analyst,admin)
 
 classify: ## Preview AI-proposed RBAC tiers for backend/data/raw (no DB writes)
 	cd backend && uv run python -m app.ingestion.cli \
@@ -49,7 +49,7 @@ ingest-auto: ## Ingest backend/data/raw with AI-assigned RBAC tiers (fails close
 hf-ingest: ## Ingest a HuggingFace text dataset (override DATASET=... LIMIT=... ROLES=...)
 	cd backend && uv run python -m app.ingestion.hf_cli \
 		--dataset $(or $(DATASET),Postzeun/Patient-Doctor) --limit $(or $(LIMIT),100) \
-		--roles $(or $(ROLES),analyst,admin) --sensitivity $(or $(SENSITIVITY),internal) \
+		--roles $(if $(ROLES),$(ROLES),analyst,admin) --sensitivity $(or $(SENSITIVITY),internal) \
 		--record-prefix $(or $(PREFIX),"This is a conversation between a patient and a doctor")
 
 presets: ## List ready-made corpus presets (no PDFs of your own needed)

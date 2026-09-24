@@ -28,6 +28,7 @@ DEST = Path(__file__).resolve().parent.parent / "backend" / "data" / "raw"
 
 def main() -> None:
     DEST.mkdir(parents=True, exist_ok=True)
+    failed = []
     for arxiv_id, slug in PAPERS.items():
         out = DEST / f"{slug}.pdf"
         if out.exists():
@@ -35,14 +36,22 @@ def main() -> None:
             continue
         url = f"https://arxiv.org/pdf/{arxiv_id}.pdf"
         req = urllib.request.Request(url, headers={"User-Agent": "advanced-rag-demo/0.1"})
-        try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                out.write_bytes(resp.read())
-            print(f"saved {out.name}  ({out.stat().st_size // 1024} KB)")
-        except Exception as exc:  # network/rate-limit; keep going with the rest
-            print(f"FAIL  {arxiv_id}: {exc}", file=sys.stderr)
+        for attempt in range(1, 4):
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    out.write_bytes(resp.read())
+                print(f"saved {out.name}  ({out.stat().st_size // 1024} KB)")
+                break
+            except Exception as exc:  # arXiv throttles with 406/429 now and then
+                print(f"FAIL  {arxiv_id} (attempt {attempt}/3): {exc}", file=sys.stderr)
+                time.sleep(5 * attempt)
+        else:
+            failed.append(arxiv_id)
         time.sleep(2)  # be polite to arXiv
     print(f"\nCorpus directory: {DEST}\nNext: make ingest")
+    # A silently smaller corpus would skew anything measured on it (the eval gate).
+    if failed:
+        sys.exit(f"could not download: {', '.join(failed)}")
 
 
 if __name__ == "__main__":
