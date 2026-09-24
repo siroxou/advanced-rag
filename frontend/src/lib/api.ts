@@ -132,9 +132,8 @@ export type SettingsPatch = Partial<{
   model: string;
   base_url: string;
   enable_thinking: boolean;
-  /** Provider-neutral key field; openrouter_api_key stays accepted for compatibility. */
+  /** Provider-neutral key field; an empty string clears the stored key. */
   api_key: string;
-  openrouter_api_key: string;
   temperature: number;
   max_tokens: number;
   guardrails_enabled: boolean;

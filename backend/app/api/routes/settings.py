@@ -41,8 +41,9 @@ class SettingsPatch(BaseModel):
     model: str | None = None
     base_url: str | None = None
     enable_thinking: bool | None = None
-    # Empty string clears the user's key (reverting to the demo key).
-    openrouter_api_key: str | None = None
+    # The Settings page's provider-neutral field; one stored key serves whichever
+    # provider is selected. Empty string clears it (reverting to the demo key).
+    api_key: str | None = None
     temperature: float | None = None
     max_tokens: int | None = None
     guardrails_enabled: bool | None = None
@@ -62,7 +63,7 @@ _KEY_MAP = {
     "model": "llm.model",
     "base_url": "llm.base_url",
     "enable_thinking": "llm.enable_thinking",
-    "openrouter_api_key": "llm.openrouter_api_key",
+    "api_key": "llm.openrouter_api_key",
     "temperature": "gen.temperature",
     "max_tokens": "gen.max_tokens",
     "guardrails_enabled": "guardrails.enabled",
