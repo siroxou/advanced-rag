@@ -8,7 +8,7 @@
 # The whole body is wrapped in a function so zsh parses the file fully before
 # running it: a `git pull` that rewrites this script mid-launch can't corrupt the
 # in-flight run.
-# ponytail: pull-on-launch IS the auto-update. For always-on background updates,
+# Deliberately simple: pull-on-launch IS the auto-update. For always-on updates,
 # add a LaunchAgent running `git -C <repo> fetch` on a timer (see notes below).
 
 # $0 holds the script path only at top level; inside a function zsh's
@@ -40,7 +40,8 @@ launch() {
   local BACK_PID="" FRONT_PID=""
 
   log()  { print -P "%F{cyan}==>%f $*"; }
-  kill_port() { local p=$(lsof -ti tcp:$1 2>/dev/null); [ -n "$p" ] && kill $p 2>/dev/null; }
+  # Listeners only (not the browser's own connections), one PID per line split for kill.
+  kill_port() { local p=$(lsof -ti tcp:$1 -sTCP:LISTEN 2>/dev/null); [ -n "$p" ] && kill ${(f)p} 2>/dev/null; }
   stop() {
     log "Stopping backend + frontend"
     [ -n "$BACK_PID" ]  && kill $BACK_PID  2>/dev/null
@@ -48,7 +49,7 @@ launch() {
     kill_port $BACKEND_PORT; kill_port $FRONTEND_PORT
     exit 0
   }
-  trap stop INT TERM
+  trap stop INT TERM HUP   # HUP: the Terminal window was closed
 
   # Reclaim ports from any previous run so a relaunch is always clean.
   log "Freeing ports $BACKEND_PORT / $FRONTEND_PORT"
@@ -76,7 +77,12 @@ launch() {
 
   # 4. Apply DB migrations (no-op when already current).
   log "Applying DB migrations"
-  ( cd backend && uv run --extra ml alembic upgrade head ) || log "migration step failed - check Postgres"
+  # A stale schema would boot a backend whose writes fail, so stop here instead.
+  if ! ( cd backend && uv run --extra ml alembic upgrade head ); then
+    log "Migrations failed - fix the database, then relaunch"
+    read -k 1 "?Press any key to close. "
+    return 1
+  fi
 
   # 5. Start the servers (logs stream into this window).
   log "Starting FastAPI backend on :$BACKEND_PORT"
