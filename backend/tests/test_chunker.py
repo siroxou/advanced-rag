@@ -36,3 +36,7 @@ def test_overlap_shares_content_between_neighbors():
     # With overlap, the tail of one chunk reappears at the head of the next.
     first_tail = chunks[0].split()[-1]
     assert first_tail in chunks[1]
+
+
+def test_chunk_text_strips_nul_bytes():
+    assert chunk_text("a\x00b", size=100, overlap=10) == ["ab"]

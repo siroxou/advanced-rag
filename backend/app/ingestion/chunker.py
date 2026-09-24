@@ -57,7 +57,8 @@ def _merge(pieces: list[str], size: int, overlap: int, joiner: str = " ") -> lis
 
 def chunk_text(text: str, *, size: int, overlap: int) -> list[str]:
     """Split ``text`` into overlapping chunks of roughly ``size`` characters."""
-    text = text.strip()
+    # Postgres text columns reject NUL, and some PDFs extract with them.
+    text = text.replace("\x00", "").strip()
     if not text:
         return []
     if len(text) <= size:
