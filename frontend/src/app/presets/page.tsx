@@ -40,7 +40,7 @@ export default function CorpusPage() {
 
   const fetchPresets = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/presets`);
+      const res = await fetch(`${API_BASE}/api/presets`, { headers: demoHeaders() });
       if (res.ok) setPresets(await res.json());
       else setError("Failed to fetch datasets");
     } catch {
