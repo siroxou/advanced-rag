@@ -14,5 +14,5 @@ All notable changes to this project are documented here. Format follows
 - Gemma 4 reasoning handling: thinking toggle + answer token-budget floor so the
   final answer always lands (verified live against `gemma4:latest`).
 - `docker-compose.yml` (Postgres + pgvector), `Makefile`, `.env.example`.
-- CI (ruff · ruff-format · mypy · pytest · frontend build), pre-commit hooks.
+- CI (ruff · ruff-format · mypy · pytest · frontend build).
 - Documentation: README + architecture, ADRs, threat model, runbook. Apache-2.0 license.
