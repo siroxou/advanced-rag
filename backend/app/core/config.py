@@ -10,6 +10,9 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Published in this repo, so it is only ever acceptable on localhost.
+INSECURE_JWT_SECRET = "dev-insecure-change-me"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_prefix="", extra="ignore")
@@ -52,9 +55,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://rag:rag@localhost:5432/rag"
 
     # --- Auth (Phase 2) ----------------------------------------------------------
-    # CHANGE in production. The signed JWT carries the user's roles, which the
-    # retriever pushes into the Postgres RLS policy - so roles cannot be spoofed.
-    jwt_secret: str = "dev-insecure-change-me"
+    # The signed JWT carries the user's roles, which the retriever pushes into the
+    # Postgres RLS policy. The default is public, so startup refuses it anywhere
+    # but ENVIRONMENT=local (see main.lifespan).
+    jwt_secret: str = INSECURE_JWT_SECRET
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 720  # 12h dev sessions
     # Portfolio demo runs without a login wall: requests with no/invalid JWT fall

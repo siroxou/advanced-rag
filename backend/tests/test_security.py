@@ -5,6 +5,8 @@ from __future__ import annotations
 import jwt
 import pytest
 
+from app.core.config import INSECURE_JWT_SECRET, settings
+from app.main import app, lifespan
 from app.security.passwords import hash_password, verify_password
 from app.security.tokens import create_access_token, decode_access_token
 
@@ -36,3 +38,11 @@ def test_token_rejects_tampered_signature():
 def test_decode_rejects_garbage():
     with pytest.raises(jwt.PyJWTError):
         decode_access_token("not.a.jwt")
+
+
+async def test_non_local_refuses_the_dev_jwt_secret(monkeypatch):
+    monkeypatch.setattr(settings, "environment", "cloud")
+    monkeypatch.setattr(settings, "jwt_secret", INSECURE_JWT_SECRET)
+    with pytest.raises(RuntimeError, match="JWT_SECRET"):
+        async with lifespan(app):
+            pass

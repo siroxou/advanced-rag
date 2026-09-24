@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
-from app.core.config import settings
+from app.core.config import INSECURE_JWT_SECRET, settings
 from app.core.logging import configure_logging, get_logger
 from app.core.ratelimit import RateLimitMiddleware
 from app.core.runtime_settings import runtime
@@ -20,6 +20,12 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     configure_logging(settings.log_level)
+    # Anyone can mint an admin token with the public default secret, so only
+    # tolerate it on a developer machine.
+    if settings.jwt_secret == INSECURE_JWT_SECRET:
+        if settings.environment != "local":
+            raise RuntimeError("JWT_SECRET is the public dev default; set a real one")
+        logger.warning("insecure_jwt_secret", hint="fine on localhost, never deploy it")
     # Load operator overrides from the DB so the running config reflects any
     # Settings-page changes made in a previous session. Fails soft if the DB is down.
     await runtime.load()
