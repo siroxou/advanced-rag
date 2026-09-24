@@ -132,6 +132,28 @@ def _usage_fields(usage: Usage | None, model: str) -> dict[str, Any]:
 router = APIRouter()
 
 
+async def _audit_failure(
+    user: CurrentUser, query: str, started: float, model: str, exc: Exception
+) -> None:
+    """Record a request that errored (e.g. the provider refused it), then let it raise.
+
+    Without this row an outage never reaches the audit log, and the metrics page
+    would report a 0% failure rate exactly when requests are failing.
+    """
+    await write_audit(
+        username=user.username,
+        roles=user.roles,
+        query=query,
+        retrieved_doc_ids=[],
+        answer="",
+        latency_ms=_elapsed_ms(started),
+        model=model,
+        prompt_version=PROMPT_VERSION,
+        success=False,
+        failure_reason=type(exc).__name__,
+    )
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     req: ChatRequest,
@@ -279,6 +301,9 @@ async def chat(
             used_web=state.get("used_web", False),
             guardrails=_report(out),
         )
+    except Exception as exc:
+        await _audit_failure(user, query, started, llm.model, exc)
+        raise
     finally:
         trace.finish()
 
@@ -455,6 +480,9 @@ async def chat_stream(
                 generation_ms=generation_ms,
                 **_usage_fields(gen_usage, llm.model),
             )
+        except Exception as exc:
+            await _audit_failure(user, query, started, llm.model, exc)
+            raise
         finally:
             trace.finish()
 
