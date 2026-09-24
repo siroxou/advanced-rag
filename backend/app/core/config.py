@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # Gemma 4 is a reasoning model. Off by default so the answer path is fast and
     # always returns final `content` (not chain-of-thought). Agents can opt in.
     llm_enable_thinking: bool = False
-    # Shared OpenRouter key for the hosted demo (one OpenAI-compatible gateway that
+    # Optional shared OpenRouter key for a full-stack deployment (one gateway that
     # routes to OpenAI / Anthropic / Google / many models). Empty locally; the real
     # key lives only in the gitignored .env. Users can override with their own key
     # from the Settings page, which also lifts the demo rate limit.

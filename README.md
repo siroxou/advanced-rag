@@ -20,8 +20,8 @@ Most RAG demos answer questions over a pile of PDFs. Enterprises can't ship that
 - 🔐 **RBAC where it actually matters - retrieval.** Document access is enforced by **Postgres Row-Level Security**, so the database physically cannot return a chunk the caller isn't cleared for - even if the application query is buggy.
 - 🤖 **Multi-agent & context-aware.** A LangGraph supervisor routes each query through context-rewrite → retrieval / live web → grounded synthesis, with conversation memory.
 - 🧯 **Layered guardrails.** Prompt-injection blocking on input, a citation check that flags any `[n]` pointing at a source that was not retrieved, PII detection or masking on output, and an optional input safety-classifier hook (off unless `GUARDRAILS_SAFETY_MODEL` is set).
-- 🦾 **Local, open model.** Gemma 4 runs on-device via Ollama (Apple Metal). A LoRA fine-tuning scaffold (dataset generator, MLX config, eval harness) lives in [`ml/`](ml/); no adapter has been trained yet. No proprietary API required.
-- 🚀 **Two profiles.** The full stack runs locally on a MacBook, with no cloud calls at query time once the models are downloaded. The hosted demo is a separate, smaller Next.js implementation; see [Runtime profiles](#runtime-profiles).
+- 🦾 **Local, open model.** Gemma 4 runs on-device via Ollama (Apple Metal). A LoRA fine-tuning scaffold is in place (dataset generator and eval harness in `backend/app/finetune/`, MLX config and model card template in [`ml/`](ml/)); no adapter has been trained yet. No proprietary API required.
+- 🚀 **Two profiles.** The full stack runs locally on a MacBook, with no cloud calls at query time once the models are downloaded and `HF_HUB_OFFLINE=1` is set. The hosted demo is a separate, smaller Next.js implementation; see [Runtime profiles](#runtime-profiles).
 
 ## Architecture
 
@@ -60,7 +60,7 @@ is which rather than letting the diagram imply the demo does more than it does.
 | Storage | Postgres + pgvector (documents, chunks, users, audit) | None - cookies hold the session |
 | Web search | Tavily when a key is set, for analyst and admin | Off |
 | Runs with | `make api` / `make web` | Next.js route handlers on Vercel |
-| Cost | $0 with a local model, offline once models are downloaded | ~$0 (visitors bring their own key) |
+| Cost | $0 with a local model; offline once models are downloaded (`HF_HUB_OFFLINE=1`) | ~$0 (visitors bring their own key) |
 
 The demo exists to make the *behaviour* clickable - switch role, watch the answer
 change, try an injection and see it blocked. The security guarantee it illustrates
@@ -164,8 +164,9 @@ against, an `admin`-only chunk:
 
 ```bash
 cd backend
-uv run python -m app.ingestion.cli --input data/raw/public_overview.pdf    --source-id demo --roles viewer,analyst,admin --sensitivity public
-uv run python -m app.ingestion.cli --input data/raw/restricted_finance.pdf --source-id demo --roles admin                --sensitivity restricted
+# any two PDFs work; these two come from `make corpus`
+uv run python -m app.ingestion.cli --input data/raw/attention-is-all-you-need.pdf --source-id demo --roles viewer,analyst,admin --sensitivity public
+uv run python -m app.ingestion.cli --input data/raw/self-rag.pdf                  --source-id demo --roles admin                --sensitivity restricted
 # switch to viewer, ask about the restricted doc → "I don't have enough information ..."  (no leak)
 # switch to admin,  ask the same question        → grounded answer with a [n] citation
 ```
@@ -196,9 +197,9 @@ drop-in points, not dependencies. See [ADR-0008](docs/adr/0008-layered-guardrail
 changes the running system with no restart, backed by a small `app_settings` table that
 overlays the env defaults and hot-reloads on save:
 
-- **Swap models / bring your own key.** Pick any of 11 OpenAI-compatible providers
-  (OpenRouter by default, one gateway fronting Anthropic, OpenAI, Google and more) and any
-  model - the dropdown is populated live, with a "Test connection" probe. In the full stack a
+- **Swap models / bring your own key.** Pick any of 11 OpenAI-compatible providers (the
+  full stack starts on Ollama; OpenRouter is one gateway fronting Anthropic, OpenAI, Google and
+  more) and any model - the dropdown is populated live, with a "Test connection" probe. In the full stack a
   shared `OPENROUTER_API_KEY` is rate limited, and saving your own key lifts the cap. The
   hosted demo has no shared key: each visitor brings their own, held in an httpOnly cookie.
   Keys are never returned by the API (only `using_demo_key` / `*_key_set` booleans).

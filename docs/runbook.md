@@ -29,8 +29,10 @@ make check           # lint + types + tests
   containerized - Gemma runs on the host via Ollama).
 
 ## Observability (Phase 6)
-- Every chat request is recorded in `audit_log` with latency, token cost and grounding; the
+- Every chat request, including blocked, refused and failed ones, is recorded in `audit_log`
+  with its latency, token cost (for priced models) and grounding verdict; the
   Metrics page (admin only) aggregates it into P50/P95 latency, cost and citation coverage.
 - LangFuse tracing is optional and off by default: install it with
-  `cd backend && uv sync --extra obs`, set `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` in
+  `cd backend && uv sync --extra ml --extra dev --extra obs` (a plain `--extra obs` sync
+  would uninstall the others), set `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` in
   `backend/.env`, and each chat request becomes one trace. It targets the Langfuse v2 client.

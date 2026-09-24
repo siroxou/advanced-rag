@@ -102,43 +102,45 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Try these */}
-        <section>
-          <h2 className="eyebrow mb-3 text-center">Try asking</h2>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {TRY.map(({ q, tier }) => (
-              <Link
-                key={q}
-                href="/chat"
-                className="card group flex flex-col gap-3 p-4 transition-[border-color,transform] hover:border-accent-line active:scale-[0.99]"
-              >
-                <span className="text-sm leading-snug text-muted">&ldquo;{q}&rdquo;</span>
-                <span className="mt-auto flex items-center justify-between gap-2">
-                  <span
-                    className={`badge ${
-                      tier === "Restricted"
-                        ? "badge-danger"
-                        : tier === "Internal"
-                          ? "badge-info"
-                          : "badge-warn"
-                    }`}
-                  >
-                    {tier}
+        {/* Try these: the questions target the bundled demo corpus. */}
+        {IS_HOSTED_DEMO && (
+          <section>
+            <h2 className="eyebrow mb-3 text-center">Try asking</h2>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {TRY.map(({ q, tier }) => (
+                <Link
+                  key={q}
+                  href="/chat"
+                  className="card group flex flex-col gap-3 p-4 transition-[border-color,transform] hover:border-accent-line active:scale-[0.99]"
+                >
+                  <span className="text-sm leading-snug text-muted">&ldquo;{q}&rdquo;</span>
+                  <span className="mt-auto flex items-center justify-between gap-2">
+                    <span
+                      className={`badge ${
+                        tier === "Restricted"
+                          ? "badge-danger"
+                          : tier === "Internal"
+                            ? "badge-info"
+                            : "badge-warn"
+                      }`}
+                    >
+                      {tier}
+                    </span>
+                    <IconArrowRight
+                      size={15}
+                      className="text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-accent"
+                    />
                   </span>
-                  <IconArrowRight
-                    size={15}
-                    className="text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-accent"
-                  />
-                </span>
-              </Link>
-            ))}
-          </div>
-          <p className="mt-4 text-center text-sm text-faint">
-            Ask the first one as a <span className="font-medium text-muted">Viewer</span> and you
-            are refused. Switch to <span className="font-medium text-muted">Admin</span> in the
-            sidebar and ask again.
-          </p>
-        </section>
+                </Link>
+              ))}
+            </div>
+            <p className="mt-4 text-center text-sm text-faint">
+              Ask the first one as a <span className="font-medium text-muted">Viewer</span> and you
+              are refused. Switch to <span className="font-medium text-muted">Admin</span> in the
+              sidebar and ask again.
+            </p>
+          </section>
+        )}
 
         {/* Features */}
         <section className="mt-16">
