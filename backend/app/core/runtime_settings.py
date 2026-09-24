@@ -133,7 +133,11 @@ class RuntimeSettings:
 
     def using_demo_key(self) -> bool:
         """True only when a request would spend the shared demo OpenRouter key."""
-        return not self.get_user_openrouter_key() and bool(settings.openrouter_api_key)
+        return (
+            self.get_llm_provider() == "openrouter"
+            and not self.get_user_openrouter_key()
+            and bool(settings.openrouter_api_key)
+        )
 
     # --- Generation defaults ----------------------------------------------------
     def get_temperature(self) -> float:

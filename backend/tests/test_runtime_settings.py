@@ -30,6 +30,7 @@ def test_byo_key_resolution_and_demo_flag(monkeypatch):
 
     monkeypatch.setattr(mod.settings, "openrouter_api_key", "demo-key", raising=False)
     rs = RuntimeSettings()
+    rs._cache["llm.provider"] = "openrouter"
     # No user key: the shared demo key is used.
     assert rs.using_demo_key() is True
     assert rs.get_resolved_api_key() == "demo-key"
@@ -37,6 +38,16 @@ def test_byo_key_resolution_and_demo_flag(monkeypatch):
     rs._cache["llm.openrouter_api_key"] = "user-key"
     assert rs.using_demo_key() is False
     assert rs.get_resolved_api_key() == "user-key"
+
+
+def test_local_provider_never_counts_as_the_demo_key(monkeypatch):
+    # The rate limiter keys on this, and a local model spends nobody's credits.
+    import app.core.runtime_settings as mod
+
+    monkeypatch.setattr(mod.settings, "openrouter_api_key", "demo-key", raising=False)
+    rs = RuntimeSettings()
+    rs._cache["llm.provider"] = "ollama"
+    assert rs.using_demo_key() is False
 
 
 def test_snapshot_never_leaks_the_key():
