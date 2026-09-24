@@ -73,12 +73,15 @@ async def reclassify_document(
 UPLOAD_DIR = Path(__file__).parents[3] / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
+# The "internal" tier's roles, so the default ACL matches the default sensitivity.
+_UPLOAD_ROLES = "analyst,admin"
+
 
 @router.post("/documents/upload")
 async def upload_document(
     file: UploadFile = File(...),
     sensitivity: str = "internal",
-    allowed_roles: str = "viewer",
+    allowed_roles: str = _UPLOAD_ROLES,
     session: AsyncSession = Depends(get_session),
     _: CurrentUser = RequireAdmin,
 ) -> dict[str, Any]:
@@ -86,14 +89,14 @@ async def upload_document(
 
     Admin-only: the caller picks the ACL the resulting chunks are stored with.
     """
-    filename = file.filename or ""
+    # Client-supplied; keep only the basename so it cannot escape UPLOAD_DIR.
+    filename = Path(file.filename or "").name
     if not filename.endswith(".pdf"):
         raise HTTPException(400, "Only PDF files are supported")
 
-    # Parse roles
     roles = [r.strip() for r in allowed_roles.split(",") if r.strip()]
     if not roles:
-        roles = ["viewer"]
+        roles = _UPLOAD_ROLES.split(",")
 
     # Save file temporarily
     upload_path = UPLOAD_DIR / filename

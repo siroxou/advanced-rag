@@ -120,3 +120,23 @@ def test_create_user_reads_the_console_json_body() -> None:
     assert resp.status_code == 200, resp.text
     assert resp.json()["roles"] == ["analyst"]
     assert db.added[0].username == "neo"
+
+
+def test_upload_keeps_only_the_basename_and_stays_internal(monkeypatch) -> None:
+    from app.api.routes import documents
+
+    seen: dict[str, Any] = {}
+
+    async def fake_ingest(session: Any, *, path: Any, source_id: str, **kw: Any) -> Any:
+        seen.update(path=path, source_id=source_id, **kw)
+        return SimpleNamespace(documents=1, chunks_inserted=0, chunks_skipped=0)
+
+    monkeypatch.setattr(documents, "ingest_pdf", fake_ingest)
+    files = {"file": ("../../evil.pdf", b"%PDF-1.4", "application/pdf")}
+    with _fake_db(), TestClient(app) as client:
+        resp = client.post("/api/documents/upload", files=files, headers=_auth("ada", ["admin"]))
+    assert resp.status_code == 200, resp.text
+    assert seen["source_id"] == "evil.pdf"
+    assert seen["path"].parent == documents.UPLOAD_DIR
+    # Badged internal, so a viewer must not be able to read it.
+    assert seen["allowed_roles"] == ["analyst", "admin"]
