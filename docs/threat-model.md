@@ -12,10 +12,10 @@ A lightweight STRIDE-flavored model for the risks that matter most in an enterpr
 | # | Threat | Vector | Mitigation |
 |---|---|---|---|
 | T1 | **RAG data-exfiltration** | A user retrieves chunks they aren't cleared for | **Postgres RLS** filters every retrieval at the DB layer (ADR-0003); ACLs set at ingestion |
-| T2 | **Prompt injection** | Malicious instructions in the query or in a retrieved/web document | Input injection check + ShieldGemma; retrieved content is treated as data, not instructions; output grounding check |
-| T3 | **Unsafe / hallucinated output** | Model emits harmful or unsupported claims | ShieldGemma output safety + grounding/citation validator → refuse, don't ship |
-| T4 | **PII leakage** | Sensitive data in answers or logs | Presidio PII detection/redaction (pluggable); audit log stores hashes, not raw answers |
-| T5 | **AuthZ bypass** | Forged/elevated roles, client-supplied filters | Server-side JWT validation; RLS derives filters from the verified identity, never client input |
+| T2 | **Prompt injection** | Malicious instructions in the query or in a retrieved/web document | Regex injection check blocks the user query (plus an optional safety model when configured); the system prompt treats retrieved content as data; ingested documents are admin-curated; web-search results are not screened yet |
+| T3 | **Unsafe / hallucinated output** | Model emits harmful or unsupported claims | Citation check flags citations to sources that were not retrieved; nothing retrieved means a fixed refusal; no output safety model runs |
+| T4 | **PII leakage** | Sensitive data in answers or logs | Regex PII detection and optional masking (Presidio is a drop-in, not installed); audit log stores answer hashes, not raw answers (queries are stored) |
+| T5 | **AuthZ bypass** | Forged/elevated roles, client-supplied filters | Server-side JWT validation, with startup refusing the public default secret outside `ENVIRONMENT=local`. With `AUTH_REQUIRED=true`, RLS roles come only from the verified JWT. In the default demo mode, reads use client-chosen roles via `X-Demo-Roles` (that is the role switcher); every write, other users' audit rows and the metrics aggregate need a signed admin token (ADR-0010) |
 | T6 | **Abuse / DoS** | Excessive or automated requests | Rate limiting + audit; cloud profile sits behind platform protections |
 
 ## Non-goals (this phase)

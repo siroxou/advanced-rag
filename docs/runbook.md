@@ -29,8 +29,8 @@ make check           # lint + types + tests
   containerized - Gemma runs on the host via Ollama).
 
 ## Observability (Phase 6)
-- LangFuse traces every agent step. Local self-host or free cloud tier; set `LANGFUSE_*` in `.env`.
-
-## Self-hosting LangFuse (optional)
-LangFuse v3 needs Postgres + ClickHouse + Redis; for the lean local profile we default to the
-free cloud tier. A `docker-compose.langfuse.yml` can be added when full self-hosting is needed.
+- Every chat request is recorded in `audit_log` with latency, token cost and grounding; the
+  Metrics page (admin only) aggregates it into P50/P95 latency, cost and citation coverage.
+- LangFuse tracing is optional and off by default: install it with
+  `cd backend && uv sync --extra obs`, set `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` in
+  `backend/.env`, and each chat request becomes one trace. It targets the Langfuse v2 client.
