@@ -37,7 +37,7 @@ dev = [
 ]
 # Optional LangFuse tracing (Phase 6). Off by default; enable with the keys set.
 obs = [
-    "langfuse>=2.0",
+    "langfuse>=2.0,<3",
 ]
 
 [tool.uv]
