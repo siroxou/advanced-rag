@@ -49,6 +49,12 @@ def test_gate_fails_instead_of_passing_vacuously():
     _gate(_metrics(10, 0.9), args)  # a real, passing rate does not exit
 
 
+def test_cost_gate_fails_when_cost_was_not_measured():
+    args = argparse.Namespace(min_citation_rate=0.0, max_p95_latency_ms=0.0, max_cost_usd=0.02)
+    with pytest.raises(SystemExit):
+        _gate(_metrics(10, 0.9), args)  # avg_cost_usd is None: nothing was priced
+
+
 def test_empty_dataset_fails_before_touching_the_db(tmp_path, monkeypatch):
     empty = tmp_path / "empty.jsonl"
     empty.write_text("")

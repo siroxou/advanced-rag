@@ -133,7 +133,10 @@ def _gate(metrics: dict[str, Any], args: argparse.Namespace) -> None:
     if args.max_p95_latency_ms and p95 is not None and p95 > args.max_p95_latency_ms:
         failures.append(f"p95 latency {p95:.0f}ms > {args.max_p95_latency_ms:.0f}ms")
     cost = metrics["avg_cost_usd"]
-    if args.max_cost_usd and cost is not None and cost > args.max_cost_usd:
+    if args.max_cost_usd and cost is None:
+        # An unpriced model or missing usage must not pass a cost gate unmeasured.
+        failures.append(f"cost untracked for {metrics.get('model')!r}; add it to pricing")
+    elif args.max_cost_usd and cost > args.max_cost_usd:
         failures.append(f"cost/req ${cost:.4f} > ${args.max_cost_usd:.4f}")
     if failures:
         print("FAIL: " + "; ".join(failures))

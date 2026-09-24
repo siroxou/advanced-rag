@@ -98,6 +98,6 @@ jobs:
       - run: terraform -chdir=infra/terraform init -backend=false
       - run: terraform -chdir=infra/terraform validate
 
-  # The RAG quality gate (citation accuracy, refusals, cost) runs in
+  # The RAG quality gate (citation accuracy and cost) runs in
   # .github/workflows/eval.yml against a configured model endpoint, on demand and
   # nightly, so it never blocks a PR on GPU availability.

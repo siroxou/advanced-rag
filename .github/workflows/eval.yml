@@ -1,7 +1,8 @@
 name: RAG eval gate
 
 # Quality gate: runs the committed golden eval set against a configured model
-# endpoint and enforces citation / latency / cost thresholds. Runs on demand and
+# endpoint and enforces citation and cost thresholds (p95 latency and refusal
+# accuracy are recorded in metrics.json, not gated). Runs on demand and
 # nightly - skipping cleanly until EVAL_LLM_API_KEY is set. Not on pull requests:
 # each run spends the key.
 #
@@ -71,7 +72,7 @@ jobs:
       - if: steps.gate.outputs.enabled == 'true'
         run: uv run python -m app.ingestion.cli --input data/raw --source-id arxiv --roles viewer,analyst,admin
       # Run against the committed golden set (no generate-dataset step) so the gate is
-      # deterministic and fast on PRs.
+      # deterministic and cheap.
       - if: steps.gate.outputs.enabled == 'true'
         run: >-
           uv run python -m app.finetune.evaluate
