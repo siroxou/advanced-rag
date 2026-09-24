@@ -30,15 +30,22 @@ _UNITS = {"h": "hours", "d": "days", "w": "weeks"}
 # The aggregate columns, shared by the per-bucket series and the overall summary.
 # grounding_ok / success are nullable booleans: ::int turns them into 1/0 and avg()
 # skips the NULLs, so coverage/failure-rate are measured only over rows that have
-# the signal. cost_usd NULLs (free/local models) drop out of the cost average too.
+# the signal. Coverage needs at least one [n] as well as no invalid one, because
+# grounding_ok alone is true for an answer that cites nothing (and for every answer
+# while the grounding guardrail is off). cost_usd NULLs (free/local models) drop out
+# of the cost average too.
 _AGG = """
     count(*) AS n,
     percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms) AS p50_ms,
     percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95_ms,
     avg(cost_usd) AS avg_cost_usd,
-    avg(grounding_ok::int)::float AS citation_coverage,
+    avg((grounding_ok AND n_citations > 0)::int)::float AS citation_coverage,
     1 - avg(success::int)::float AS failure_rate
 """
+
+# Bound as text and cast in SQL: asyncpg encodes a parameter Postgres types as
+# interval with its binary codec, which needs a timedelta, not "7 days".
+_SINCE = "ts >= now() - CAST(:interval AS text)::interval"
 
 
 def _interval(window: str) -> str:
@@ -90,10 +97,9 @@ async def get_metrics(
 
     series_sql = text(
         f"SELECT date_trunc(:bucket, ts) AS bucket, {_AGG} "
-        "FROM audit_log WHERE ts >= now() - (:interval)::interval "
-        "GROUP BY 1 ORDER BY 1"
+        f"FROM audit_log WHERE {_SINCE} GROUP BY 1 ORDER BY 1"
     )
-    overall_sql = text(f"SELECT {_AGG} FROM audit_log WHERE ts >= now() - (:interval)::interval")
+    overall_sql = text(f"SELECT {_AGG} FROM audit_log WHERE {_SINCE}")
 
     series = (await session.execute(series_sql, params)).mappings().all()
     overall = (await session.execute(overall_sql, {"interval": interval})).mappings().one()
