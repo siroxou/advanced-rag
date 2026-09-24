@@ -62,8 +62,8 @@ preset: ## Ingest a corpus preset (NAME=fred-core | patient-doctor, override LIM
 api: ## Run the FastAPI backend → http://localhost:8000
 	cd backend && uv run uvicorn app.main:app --reload --port 8000
 
-web: ## Run the Next.js frontend → http://localhost:3000
-	cd frontend && pnpm dev
+web: ## Run the Next.js console against the local API → http://localhost:3000
+	cd frontend && NEXT_PUBLIC_API_URL=http://localhost:8000 pnpm dev
 
 dmg: ## Build a downloadable installer → dist/Advanced RAG.dmg
 	./scripts/build-dmg.sh

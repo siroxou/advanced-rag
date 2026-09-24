@@ -76,7 +76,7 @@ full stack (vLLM on Modal, Neon/Supabase for Postgres) is what
 make pull-model        # ollama pull gemma4
 make install           # backend (uv) + frontend (pnpm)
 make up                # Postgres + pgvector  (needs Docker running)
-cp .env.example .env
+cp -n .env.example backend/.env   # the backend reads .env from backend/
 
 make api               # FastAPI  → http://localhost:8000/docs
 make web               # Next.js  → http://localhost:3000
