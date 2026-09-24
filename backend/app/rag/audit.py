@@ -26,6 +26,18 @@ async def write_audit(
     answer: str,
     latency_ms: int,
     used_web: bool = False,
+    # --- Metrics spine (Phase 6); all optional, best-effort ---------------------
+    model: str | None = None,
+    prompt_tokens: int | None = None,
+    completion_tokens: int | None = None,
+    cost_usd: float | None = None,
+    grounding_ok: bool | None = None,
+    n_citations: int | None = None,
+    success: bool | None = None,
+    failure_reason: str | None = None,
+    retrieval_ms: int | None = None,
+    generation_ms: int | None = None,
+    prompt_version: str | None = None,
 ) -> None:
     answer_hash = hashlib.sha256(answer.encode("utf-8")).hexdigest() if answer else None
     try:
@@ -39,6 +51,17 @@ async def write_audit(
                     answer_hash=answer_hash,
                     latency_ms=latency_ms,
                     used_web=used_web,
+                    model=model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cost_usd=cost_usd,
+                    grounding_ok=grounding_ok,
+                    n_citations=n_citations,
+                    success=success,
+                    failure_reason=failure_reason,
+                    retrieval_ms=retrieval_ms,
+                    generation_ms=generation_ms,
+                    prompt_version=prompt_version,
                 )
             )
             await session.commit()

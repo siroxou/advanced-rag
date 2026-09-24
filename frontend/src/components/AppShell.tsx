@@ -15,6 +15,7 @@ import {
   IconGithub,
   IconLibrary,
   IconMenu,
+  IconMonitor,
   IconSettings,
   IconShield,
   IconSparkle,
@@ -29,6 +30,7 @@ const NAV = [
   { label: "Corpus", href: "/presets", Icon: IconLibrary, hint: "Loaded datasets" },
   { label: "People", href: "/admin", Icon: IconUsers, hint: "Users and roles" },
   { label: "Audit", href: "/security", Icon: IconShield, hint: "Query log and guardrails" },
+  { label: "Metrics", href: "/metrics", Icon: IconMonitor, hint: "Latency, cost, citations" },
   { label: "Settings", href: "/settings", Icon: IconSettings, hint: "Model, keys, guardrails" },
 ];
 

@@ -18,7 +18,7 @@ from typing import Any, cast
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 
-from app.llm.base import ChatChunk, ChatMessage
+from app.llm.base import ChatChunk, ChatMessage, Completion, Usage
 
 # Gemma 4 is a reasoning model and may spend part of its budget thinking even with
 # thinking disabled. Floor the answer budget so the final `content` always lands
@@ -63,7 +63,7 @@ class OpenAICompatibleProvider:
 
     async def chat(
         self, messages: Sequence[ChatMessage], *, temperature: float = 0.2, max_tokens: int = 1024
-    ) -> str:
+    ) -> Completion:
         resp = await self._client.chat.completions.create(
             model=self.model,
             messages=self._wire(messages),
@@ -72,7 +72,9 @@ class OpenAICompatibleProvider:
             stream=False,
             extra_body=self._extra_body(),
         )
-        return resp.choices[0].message.content or ""
+        return Completion(
+            text=resp.choices[0].message.content or "", usage=Usage.from_openai(resp.usage)
+        )
 
     async def stream(
         self, messages: Sequence[ChatMessage], *, temperature: float = 0.2, max_tokens: int = 1024
@@ -83,15 +85,23 @@ class OpenAICompatibleProvider:
             temperature=temperature,
             max_tokens=max(max_tokens, _MIN_ANSWER_TOKENS),
             stream=True,
+            # OpenRouter/OpenAI emit a final usage-only event (empty choices) when
+            # this is set; Ollama tolerates and ignores it, so usage stays None there.
+            # Sent unconditionally; add a provider guard only if a strict local
+            # server 400s on it.
+            stream_options={"include_usage": True},
             extra_body=self._extra_body(),
         )
+        usage: Usage | None = None
         async for event in stream:
+            if event.usage is not None:
+                usage = Usage.from_openai(event.usage)
             if not event.choices:
                 continue
             delta = event.choices[0].delta.content or ""
             if delta:
                 yield ChatChunk(delta=delta)
-        yield ChatChunk(delta="", done=True)
+        yield ChatChunk(delta="", done=True, usage=usage)
 
     async def health(self) -> bool:
         try:

@@ -48,6 +48,6 @@ async def check(text: str) -> Verdict:
     except Exception:
         logger.warning("safety_check_failed", exc_info=True)
         return Verdict.ok("safety")  # fail open on infra error
-    if "unsafe" in out.strip().lower():
+    if "unsafe" in out.text.strip().lower():
         return Verdict(allowed=False, category="safety", reason="flagged unsafe by safety model")
     return Verdict.ok("safety")

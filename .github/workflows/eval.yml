@@ -1,8 +1,8 @@
 name: RAG eval gate
 
-# Quality gate: builds a grounded set and checks citation accuracy against a
-# configured model endpoint. Runs on demand and nightly (not on every PR), so it
-# never blocks normal development on GPU/model availability.
+# Quality gate: runs the committed golden eval set against a configured model
+# endpoint and enforces citation / latency / cost thresholds. Runs on
+# pull requests, on demand, and nightly - skipping cleanly until EVAL_LLM_API_KEY is set.
 #
 # Easiest setup: add a single repository secret EVAL_LLM_API_KEY with an
 # OpenRouter key - the provider, base URL, and model already default to
@@ -14,6 +14,7 @@ name: RAG eval gate
 
 on:
   workflow_dispatch:
+  pull_request:
   schedule:
     - cron: "0 6 * * *"
 
@@ -69,7 +70,18 @@ jobs:
         run: uv run python ../scripts/fetch_sample_corpus.py
       - if: steps.gate.outputs.enabled == 'true'
         run: uv run python -m app.ingestion.cli --input data/raw --source-id arxiv --roles viewer,analyst,admin
+      # Run against the committed golden set (no generate-dataset step) so the gate is
+      # deterministic and fast on PRs.
       - if: steps.gate.outputs.enabled == 'true'
-        run: uv run python -m app.finetune.dataset --limit 30
-      - if: steps.gate.outputs.enabled == 'true'
-        run: uv run python -m app.finetune.evaluate --data ../ml/datasets/valid.jsonl --min-citation-rate 0.8
+        run: >-
+          uv run python -m app.finetune.evaluate
+          --data ../ml/datasets/golden.jsonl
+          --min-citation-rate 0.8
+          --max-p95-latency-ms 20000
+          --max-cost-usd 0.02
+          --out metrics.json
+      - if: ${{ always() && steps.gate.outputs.enabled == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-metrics
+          path: backend/metrics.json

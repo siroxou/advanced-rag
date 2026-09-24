@@ -140,3 +140,10 @@ def test_upload_keeps_only_the_basename_and_stays_internal(monkeypatch) -> None:
     assert seen["path"].parent == documents.UPLOAD_DIR
     # Badged internal, so a viewer must not be able to read it.
     assert seen["allowed_roles"] == ["analyst", "admin"]
+
+
+def test_metrics_need_a_signed_admin_token() -> None:
+    # The aggregate spans every user's audit rows, so a claimed role is not enough.
+    with TestClient(app) as client:
+        assert client.get("/api/metrics", headers={"X-Demo-Roles": "admin"}).status_code == 401
+        assert client.get("/api/metrics", headers=_auth("vera", ["viewer"])).status_code == 403

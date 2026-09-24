@@ -9,6 +9,11 @@ from app.guardrails.base import Verdict
 _CITATION = re.compile(r"\[(\d+)\]")
 
 
+def count_citations(answer: str) -> int:
+    """Number of distinct inline ``[n]`` citation markers in an answer."""
+    return len({int(n) for n in _CITATION.findall(answer)})
+
+
 def validate_citations(answer: str, n_sources: int) -> Verdict:
     cited = {int(n) for n in _CITATION.findall(answer)}
     invalid = sorted(n for n in cited if n < 1 or n > n_sources)

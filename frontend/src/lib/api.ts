@@ -262,3 +262,30 @@ export async function testLlm(): Promise<{
   if (!res.ok) throw new Error(`Test failed (${res.status})`);
   return res.json();
 }
+
+// ── Metrics ───────────────────────────────────────────────────────────────────
+
+export type MetricPoint = {
+  n: number;
+  p50_ms: number | null;
+  p95_ms: number | null;
+  avg_cost_usd: number | null;
+  citation_coverage: number | null;
+  failure_rate: number | null;
+};
+
+export type MetricsResponse = {
+  window: string;
+  bucket: string;
+  overall: MetricPoint;
+  series: (MetricPoint & { bucket: string })[];
+};
+
+/** Admin-only: the aggregate covers every user's queries in the audit log. */
+export async function getMetrics(windowSize = "7d", bucket = "day"): Promise<MetricsResponse> {
+  const res = await fetch(`${API_BASE}/api/metrics?window=${windowSize}&bucket=${bucket}`, {
+    headers: demoHeaders(),
+  });
+  if (!res.ok) throw new Error(`Get metrics failed (${res.status})`);
+  return res.json();
+}

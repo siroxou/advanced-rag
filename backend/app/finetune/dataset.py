@@ -72,14 +72,16 @@ def _write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
 
 
 async def _generate_qa(llm: Any, content: str) -> tuple[str, str] | None:
-    raw = await llm.chat(
-        [
-            ChatMessage(role="system", content=_TEACHER_SYS),
-            ChatMessage(role="user", content=f"Passage:\n{content}"),
-        ],
-        temperature=0.3,
-        max_tokens=400,
-    )
+    raw = (
+        await llm.chat(
+            [
+                ChatMessage(role="system", content=_TEACHER_SYS),
+                ChatMessage(role="user", content=f"Passage:\n{content}"),
+            ],
+            temperature=0.3,
+            max_tokens=400,
+        )
+    ).text
     try:
         start, end = raw.index("{"), raw.rindex("}")
         obj = json.loads(raw[start : end + 1])

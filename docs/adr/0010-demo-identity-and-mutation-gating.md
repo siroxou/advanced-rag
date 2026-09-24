@@ -62,7 +62,8 @@ The audit log is the one place a role decides visibility outside RLS (`audit_log
 has no policy), so it follows the same rule as writes: only a signed token carrying
 `admin` sees every user's rows. The demo identity sees the demo identity's rows,
 whatever `X-Demo-Roles` claims, and those rows record the roles the client asserted,
-not roles it was granted. Web search is the other read decided by roles
+not roles it was granted. `GET /api/metrics` aggregates the same table across every
+user, so it sits behind `RequireAdmin` like a write. Web search is the other read decided by roles
 (`web_allowed`), so a demo caller claiming `analyst` may spend the server's Tavily
 key; that is accepted for a demo, and no deployment of it sets a Tavily key.
 
