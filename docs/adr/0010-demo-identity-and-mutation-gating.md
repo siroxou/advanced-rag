@@ -41,8 +41,9 @@ Row-Level Security already decides what it can actually see.
 The demo identity's roles are client-assertable, via `X-Demo-Roles`. This looks
 wrong at first glance and is the point: it makes the role switcher work against the
 real backend, so the RBAC refusal is something you can watch happen rather than
-something the README claims. It is safe because those roles only ever reach the RLS
-policy, and the header cannot set `authenticated`, so it can never reach a write.
+something the README claims. It is safe because those roles only reach read paths
+(the RLS policy, and whether the agent may search the web), and the header cannot set
+`authenticated`, so it can never reach a write or anyone else's audit rows.
 
 `demo_roles` defaults to `viewer` - least privilege, and it means the refusal is
 visible on first run instead of hidden behind an accidental admin.
@@ -56,6 +57,14 @@ which is why it is read-only, and the database is what enforces the reads.
 The cost is a second concept in `deps.py`, and the split between the hosted demo and
 the full stack is now something the README has to state plainly rather than gloss.
 That honesty is worth more than the gloss was.
+
+The audit log is the one place a role decides visibility outside RLS (`audit_log`
+has no policy), so it follows the same rule as writes: only a signed token carrying
+`admin` sees every user's rows. The demo identity sees the demo identity's rows,
+whatever `X-Demo-Roles` claims, and those rows record the roles the client asserted,
+not roles it was granted. Web search is the other read decided by roles
+(`web_allowed`), so a demo caller claiming `analyst` may spend the server's Tavily
+key; that is accepted for a demo, and no deployment of it sets a Tavily key.
 
 `AUTH_REQUIRED=true` still restores a hard JWT gate on every request for anyone
 deploying this for real. Note that it is read once at import, so it is a deployment

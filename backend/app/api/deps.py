@@ -46,9 +46,9 @@ def _demo_user(header_roles: str | None) -> CurrentUser:
 
     Letting the caller assert roles sounds alarming and is deliberate: it makes the
     RBAC story demonstrable (switch to ``viewer`` and watch Postgres refuse the
-    rows) without a login wall. It grants nothing, because the roles only ever
-    reach the RLS policy, and ``authenticated`` stays False so no mutation accepts
-    this identity.
+    rows) without a login wall. The roles only reach read paths: the RLS policy,
+    and whether the agent may search the web. ``authenticated`` stays False, so no
+    mutation, and no read of other users' audit rows, accepts this identity.
     """
     roles = [r.strip() for r in (header_roles or "").split(",") if r.strip()]
     return CurrentUser(username=settings.demo_username, roles=roles or settings.demo_role_list)

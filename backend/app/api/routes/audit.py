@@ -28,8 +28,9 @@ async def get_audit_log(
     """Retrieve audit log entries, filtered by user visibility."""
     query = select(AuditLog).order_by(AuditLog.ts.desc())
 
-    # Non-admins only see their own logs
-    if "admin" not in user.roles:
+    # Only a signed admin token sees every row. Demo roles are client-asserted
+    # (X-Demo-Roles), so the demo identity only ever sees its own rows.
+    if not (user.authenticated and "admin" in user.roles):
         query = query.where(AuditLog.username == user.username)
 
     result = await session.execute(query.offset(offset).limit(limit))

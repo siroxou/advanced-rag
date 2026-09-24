@@ -7,14 +7,54 @@ system: role claims alone never authorize a mutation - only a signed token does.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
+from types import SimpleNamespace
+from typing import Any
+
 from fastapi.testclient import TestClient
 
+from app.core.config import settings
+from app.core.db import get_session
 from app.main import app
 from app.security.tokens import create_access_token
 
 
 def _auth(username: str, roles: list[str]) -> dict[str, str]:
     return {"Authorization": f"Bearer {create_access_token(username, roles)}"}
+
+
+class _FakeSession:
+    """Just enough AsyncSession for one-query handlers, so these run offline."""
+
+    def __init__(self) -> None:
+        self.stmts: list[Any] = []
+        self.added: list[Any] = []
+
+    async def execute(self, stmt: Any) -> Any:
+        self.stmts.append(stmt)
+        empty = SimpleNamespace(all=list)
+        return SimpleNamespace(scalar_one_or_none=lambda: None, scalars=lambda: empty)
+
+    def add(self, obj: Any) -> None:
+        self.added.append(obj)
+
+    async def commit(self) -> None:
+        pass
+
+
+@contextmanager
+def _fake_db() -> Iterator[_FakeSession]:
+    fake = _FakeSession()
+
+    async def _session() -> AsyncIterator[_FakeSession]:
+        yield fake
+
+    app.dependency_overrides[get_session] = _session
+    try:
+        yield fake
+    finally:
+        app.dependency_overrides.pop(get_session, None)
 
 
 def test_mutation_without_a_token_is_401() -> None:
@@ -54,3 +94,20 @@ def test_reads_stay_open_to_the_demo_identity() -> None:
     with TestClient(app) as client:
         assert client.get("/api/health").status_code == 200
         assert client.get("/api/settings").status_code == 200
+
+
+def test_demo_admin_header_only_sees_the_demo_audit_rows() -> None:
+    # audit_log has no RLS policy, so a client-asserted role must not widen it.
+    with _fake_db() as db, TestClient(app) as client:
+        resp = client.get("/api/audit", headers={"X-Demo-Roles": "admin"})
+    assert resp.status_code == 200
+    stmt = db.stmts[0]
+    assert "WHERE" in str(stmt)
+    assert settings.demo_username in stmt.compile().params.values()
+
+
+def test_signed_admin_sees_every_audit_row() -> None:
+    with _fake_db() as db, TestClient(app) as client:
+        resp = client.get("/api/audit", headers=_auth("ada", ["admin"]))
+    assert resp.status_code == 200
+    assert "WHERE" not in str(db.stmts[0])
